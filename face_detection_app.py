@@ -37,26 +37,59 @@ class FaceDetectionApp:
                               font=("Arial", 20, "bold"), pady=20)
         title_label.pack()
         
-        # Video selection frame
-        selection_frame = tk.Frame(self.root, pady=10)
-        selection_frame.pack(fill="x", padx=20)
+        # Source selection frame
+        source_frame = tk.LabelFrame(self.root, text="Video Source", 
+                                     font=("Arial", 12, "bold"),
+                                     pady=10, padx=10)
+        source_frame.pack(fill="x", padx=20)
         
-        tk.Label(selection_frame, text="Select Video:", 
-                font=("Arial", 12)).pack(side="left", padx=5)
+        # Radio buttons for source type
+        self.source_var = tk.StringVar(value="file")
+        
+        radio_frame = tk.Frame(source_frame)
+        radio_frame.pack(fill="x", pady=5)
+        
+        tk.Radiobutton(radio_frame, text="Video File", 
+                      variable=self.source_var, value="file",
+                      font=("Arial", 10), command=self.toggle_source).pack(side="left", padx=10)
+        
+        tk.Radiobutton(radio_frame, text="Live Webcam", 
+                      variable=self.source_var, value="webcam",
+                      font=("Arial", 10), command=self.toggle_source).pack(side="left", padx=10)
+        
+        # Video file selection (shown by default)
+        self.file_frame = tk.Frame(source_frame)
+        self.file_frame.pack(fill="x", pady=5)
+        
+        tk.Label(self.file_frame, text="Select Video:", 
+                font=("Arial", 10)).pack(side="left", padx=5)
         
         # Dropdown for video selection
         self.video_var = tk.StringVar()
-        self.video_dropdown = ttk.Combobox(selection_frame, 
+        self.video_dropdown = ttk.Combobox(self.file_frame, 
                                           textvariable=self.video_var,
                                           state="readonly",
-                                          width=40)
+                                          width=35)
         self.video_dropdown.pack(side="left", padx=5)
         
         # Refresh button
-        refresh_btn = tk.Button(selection_frame, text="Refresh", 
+        refresh_btn = tk.Button(self.file_frame, text="Refresh", 
                                command=self.refresh_videos,
                                bg="#4CAF50", fg="white", padx=10)
         refresh_btn.pack(side="left", padx=5)
+        
+        # Webcam selection (hidden by default)
+        self.webcam_frame = tk.Frame(source_frame)
+        
+        tk.Label(self.webcam_frame, text="Camera Index:", 
+                font=("Arial", 10)).pack(side="left", padx=5)
+        
+        self.webcam_var = tk.IntVar(value=0)
+        tk.Spinbox(self.webcam_frame, from_=0, to=5,
+                  textvariable=self.webcam_var, width=10).pack(side="left", padx=5)
+        
+        tk.Label(self.webcam_frame, text="(Usually 0 for default camera)", 
+                font=("Arial", 9), fg="gray").pack(side="left", padx=5)
         
         # Start detection button
         start_btn = tk.Button(self.root, text="Start Face Detection", 
@@ -74,15 +107,15 @@ class FaceDetectionApp:
                 font=("Arial", 12, "bold")).pack(anchor="w")
         
         instructions = [
-            "1. Place your video files in the 'videos' folder",
-            "2. Add known face images in the 'known_faces' folder",
+            "1. Choose video source: Video File or Live Webcam",
+            "2. For videos: Place files in 'videos' folder & click 'Refresh'",
+            "3. For webcam: Select camera index (usually 0)",
+            "4. Add known face images in the 'known_faces' folder",
             "   - Name format: 'PersonName.jpg' (e.g., 'John_Doe.jpg')",
-            "3. Click 'Refresh' to update the video list",
-            "4. Select a video from the dropdown",
             "5. Click 'Start Face Detection' to begin",
             "",
             "Controls during playback:",
-            "- Press 'q' to quit the video",
+            "- Press 'q' to quit",
             "- Press 'p' to pause/resume"
         ]
         
@@ -98,6 +131,15 @@ class FaceDetectionApp:
         
         # Load videos initially
         self.refresh_videos()
+    
+    def toggle_source(self):
+        """Toggle between video file and webcam source"""
+        if self.source_var.get() == "file":
+            self.file_frame.pack(fill="x", pady=5)
+            self.webcam_frame.pack_forget()
+        else:
+            self.file_frame.pack_forget()
+            self.webcam_frame.pack(fill="x", pady=5)
         
     def load_known_faces(self):
         """Load known faces from the known_faces folder"""
@@ -160,36 +202,46 @@ class FaceDetectionApp:
                                    fg="orange")
     
     def start_detection(self):
-        """Start face detection on selected video"""
-        selected_video = self.video_var.get()
+        """Start face detection on selected source"""
+        source_type = self.source_var.get()
         
-        if not selected_video:
-            messagebox.showwarning("No Video Selected", 
-                                 "Please select a video from the dropdown.")
-            return
+        if source_type == "file":
+            selected_video = self.video_var.get()
+            
+            if not selected_video:
+                messagebox.showwarning("No Video Selected", 
+                                     "Please select a video from the dropdown.")
+                return
+            
+            if not self.known_face_encodings:
+                messagebox.showinfo("No Known Faces", 
+                                  "No known faces loaded. Faces will be detected but not recognized.\n\n" +
+                                  "Add images to 'known_faces' folder and restart the app.")
+            
+            video_path = os.path.join(self.videos_folder, selected_video)
+            
+            if not os.path.exists(video_path):
+                messagebox.showerror("Error", "Video file not found!")
+                return
+            
+            source = video_path
+            source_name = selected_video
+        else:
+            # Webcam source
+            source = self.webcam_var.get()
+            source_name = f"Webcam {source}"
         
-        if not self.known_face_encodings:
-            messagebox.showinfo("No Known Faces", 
-                              "No known faces loaded. Faces will be detected but not recognized.\n\n" +
-                              "Add images to 'known_faces' folder and restart the app.")
-        
-        video_path = os.path.join(self.videos_folder, selected_video)
-        
-        if not os.path.exists(video_path):
-            messagebox.showerror("Error", "Video file not found!")
-            return
-        
-        self.detect_faces_in_video(video_path)
+        self.detect_faces_in_video(source, source_type, source_name)
     
-    def detect_faces_in_video(self, video_path):
-        """Process video and detect faces"""
-        video_capture = cv2.VideoCapture(video_path)
+    def detect_faces_in_video(self, source, source_type="file", source_name=""):
+        """Process video/webcam and detect faces"""
+        video_capture = cv2.VideoCapture(source)
         
         if not video_capture.isOpened():
-            messagebox.showerror("Error", "Could not open video file!")
+            messagebox.showerror("Error", f"Could not open {source_type}!")
             return
         
-        self.status_label.config(text="Processing video... Press 'q' to quit, 'p' to pause", 
+        self.status_label.config(text=f"Processing {source_name}... Press 'q' to quit, 'p' to pause", 
                                fg="blue")
         self.root.update()
         
@@ -207,6 +259,8 @@ class FaceDetectionApp:
                 ret, frame = video_capture.read()
                 
                 if not ret:
+                    if source_type == "webcam":
+                        print("Webcam feed interrupted")
                     break
                 
                 frame_count += 1
