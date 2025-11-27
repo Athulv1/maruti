@@ -291,6 +291,67 @@
       animation: ripple 0.6s ease-out;
       pointer-events: none;
     }
+    
+    /* Upload button styles */
+    .upload-btn {
+      background: linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8);
+      background-size: 200% 200%;
+      animation: buttonGradient 3s ease infinite;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 10px;
+    }
+    .upload-btn:hover {
+      transform: scale(1.05) translateY(-2px);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.5), 0 0 30px rgba(59, 130, 246, 0.3);
+    }
+    .upload-btn input[type="file"] {
+      display: none;
+    }
+    .upload-progress {
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(59, 130, 246, 0.1);
+      border-radius: 6px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      display: none;
+    }
+    .upload-progress-bar {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .upload-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #2563eb);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .upload-success {
+      color: #26a44b;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+    .upload-error {
+      color: #e04b4b;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -403,9 +464,21 @@
           
           <div id="face-video-group" class="control-group">
             <label>Select Video:</label>
-            <select id="face-video-select">
-              <option value="">Loading videos...</option>
-            </select>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <select id="face-video-select" style="flex: 1; max-width: 400px;">
+                <option value="">Loading videos...</option>
+              </select>
+              <label class="upload-btn">
+                📤 Upload Video
+                <input type="file" id="face-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv" onchange="uploadVideo('face')">
+              </label>
+            </div>
+            <div id="face-upload-progress" class="upload-progress">
+              <div style="font-size: 13px; color: #3b82f6;">Uploading...</div>
+              <div class="upload-progress-bar"><div id="face-upload-bar" class="upload-progress-fill"></div></div>
+            </div>
+            <div id="face-upload-success" class="upload-success">✓ Video uploaded successfully!</div>
+            <div id="face-upload-error" class="upload-error">✗ Upload failed. Please try again.</div>
           </div>
           
           <div id="face-webcam-group" class="control-group" style="display: none;">
@@ -462,9 +535,21 @@
           
           <div id="violation-video-group" class="control-group">
             <label>Select Video:</label>
-            <select id="violation-video-select">
-              <option value="">Loading videos...</option>
-            </select>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <select id="violation-video-select" style="flex: 1; max-width: 400px;">
+                <option value="">Loading videos...</option>
+              </select>
+              <label class="upload-btn">
+                📤 Upload Video
+                <input type="file" id="violation-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv" onchange="uploadVideo('violation')">
+              </label>
+            </div>
+            <div id="violation-upload-progress" class="upload-progress">
+              <div style="font-size: 13px; color: #3b82f6;">Uploading...</div>
+              <div class="upload-progress-bar"><div id="violation-upload-bar" class="upload-progress-fill"></div></div>
+            </div>
+            <div id="violation-upload-success" class="upload-success">✓ Video uploaded successfully!</div>
+            <div id="violation-upload-error" class="upload-error">✗ Upload failed. Please try again.</div>
           </div>
           
           <div id="violation-webcam-group" class="control-group" style="display: none;">
@@ -584,6 +669,86 @@
           }
         })
         .catch(err => console.error('Error loading videos:', err));
+    }
+    
+    // Video Upload Function
+    function uploadVideo(detectionType) {
+      const inputId = detectionType + '-upload-input';
+      const progressId = detectionType + '-upload-progress';
+      const successId = detectionType + '-upload-success';
+      const errorId = detectionType + '-upload-error';
+      const barId = detectionType + '-upload-bar';
+      
+      const fileInput = document.getElementById(inputId);
+      const file = fileInput.files[0];
+      
+      if (!file) return;
+      
+      // Hide previous messages
+      document.getElementById(successId).style.display = 'none';
+      document.getElementById(errorId).style.display = 'none';
+      
+      // Show progress bar
+      const progressDiv = document.getElementById(progressId);
+      progressDiv.style.display = 'block';
+      const progressBar = document.getElementById(barId);
+      progressBar.style.width = '0%';
+      
+      // Create FormData
+      const formData = new FormData();
+      formData.append('video', file);
+      
+      // Upload with progress
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener('progress', function(e) {
+        if (e.lengthComputable) {
+          const percentComplete = (e.loaded / e.total) * 100;
+          progressBar.style.width = percentComplete + '%';
+        }
+      });
+      
+      xhr.addEventListener('load', function() {
+        progressDiv.style.display = 'none';
+        
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success) {
+            // Show success message
+            document.getElementById(successId).style.display = 'block';
+            setTimeout(() => {
+              document.getElementById(successId).style.display = 'none';
+            }, 3000);
+            
+            // Reload video list and select the new video
+            loadVideos();
+            setTimeout(() => {
+              const selectId = detectionType + '-video-select';
+              const select = document.getElementById(selectId);
+              select.value = response.filename;
+            }, 500);
+          } else {
+            document.getElementById(errorId).textContent = '✗ ' + response.error;
+            document.getElementById(errorId).style.display = 'block';
+          }
+        } else {
+          document.getElementById(errorId).textContent = '✗ Upload failed. Please try again.';
+          document.getElementById(errorId).style.display = 'block';
+        }
+        
+        // Reset file input
+        fileInput.value = '';
+      });
+      
+      xhr.addEventListener('error', function() {
+        progressDiv.style.display = 'none';
+        document.getElementById(errorId).textContent = '✗ Network error. Please try again.';
+        document.getElementById(errorId).style.display = 'block';
+        fileInput.value = '';
+      });
+      
+      xhr.open('POST', '/api/upload-video');
+      xhr.send(formData);
     }
     
     // Source toggles

@@ -16,10 +16,15 @@ VIDEOS_FOLDER = 'videos'
 KNOWN_FACES_FOLDER = 'known_faces'
 VIOLATIONS_FOLDER = 'violations'
 ALERT_SOUND = 'violation_alert.wav'
+UPLOAD_FOLDER = 'videos'
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv'}
 
 os.makedirs(VIDEOS_FOLDER, exist_ok=True)
 os.makedirs(KNOWN_FACES_FOLDER, exist_ok=True)
 os.makedirs(VIOLATIONS_FOLDER, exist_ok=True)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 
 # Global state
 class AppState:
@@ -93,10 +98,46 @@ class AppState:
 
 state = AppState()
 
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 @app.route('/')
 def index():
     """Serve dashboard HTML"""
     return render_template('dashboard.html')
+
+@app.route('/api/upload-video', methods=['POST'])
+def upload_video():
+    """Upload video file"""
+    try:
+        if 'video' not in request.files:
+            return jsonify({'success': False, 'error': 'No video file provided'}), 400
+        
+        file = request.files['video']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'success': False, 'error': 'Invalid file type. Allowed: mp4, avi, mov, mkv, wmv, flv'}), 400
+        
+        # Create unique filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"uploaded_{timestamp}.{ext}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Save file
+        file.save(filepath)
+        
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'message': 'Video uploaded successfully'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/videos')
 def get_videos():
