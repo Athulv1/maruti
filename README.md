@@ -4,6 +4,7 @@ A Python-based face detection and recognition system with a user-friendly GUI th
 
 ## Features
 
+### Use Case 1: Face Detection & Recognition
 - **Video Selection**: Dropdown list to select from videos in your videos folder
 - **Face Detection**: Automatically detects faces in the selected video
 - **Face Recognition**: Recognizes known faces and displays their names
@@ -11,18 +12,29 @@ A Python-based face detection and recognition system with a user-friendly GUI th
 - **User-friendly GUI**: Simple tkinter-based interface
 - **Pause/Resume**: Control playback during face detection
 
+### Use Case 2: Mobile Phone Violation Detection
+- **Video Selection**: Same dropdown interface for video selection
+- **Mobile Detection**: Detects people using mobile phones/cell phones
+- **Audio Alerts**: Plays sound alert when violation is detected
+- **Violation Counter**: Real-time count of violations detected
+- **Screenshot Capture**: Save screenshots of violations
+- **Adjustable Sensitivity**: Configure confidence threshold
+- **Violation Logging**: Automatically saves violation screenshots
+
 ## Project Structure
 
 ```
 maruthi/
-├── face_detection_app.py      # Main application
-├── add_known_face.py          # Helper script to add known faces
-├── requirements.txt           # Python dependencies
-├── videos/                    # Place your video files here
-└── known_faces/              # Place known face images here
-    ├── John_Doe.jpg
-    ├── Jane_Smith.jpg
-    └── ...
+├── face_detection_app.py           # Use Case 1: Face Detection & Recognition
+├── mobile_violation_detection.py   # Use Case 2: Mobile Phone Violation Detection
+├── add_known_face.py               # Helper script to add known faces
+├── create_alert_sound.py           # Helper to generate alert sound
+├── requirements.txt                # Python dependencies
+├── run.sh                          # Convenience script to run apps
+├── videos/                         # Place your video files here
+├── known_faces/                    # Place known face images here (Use Case 1)
+├── violations/                     # Screenshots of violations saved here
+└── violation_alert.wav             # Alert sound for violations
 ```
 
 ## Installation
@@ -70,7 +82,9 @@ pip install -r requirements.txt
 
 ## Usage
 
-### 1. Add Known Faces
+### Use Case 1: Face Detection & Recognition
+
+#### 1. Add Known Faces
 
 To recognize faces, you need to add known face images to the `known_faces` folder:
 
@@ -86,12 +100,12 @@ python add_known_face.py
 ```
 This script will guide you through adding a known face from an image file.
 
-### 2. Add Videos
+#### 2. Add Videos
 
 - Place your video files in the `videos/` folder
 - Supported formats: `.mp4`, `.avi`, `.mov`, `.mkv`, `.flv`, `.wmv`
 
-### 3. Run the Application
+#### 3. Run Face Detection Application
 
 ```bash
 # Activate virtual environment first
@@ -103,7 +117,7 @@ venv\Scripts\activate  # On Windows
 python face_detection_app.py
 ```
 
-### 4. Using the Application
+#### 4. Using Face Detection App
 
 1. The application window will open
 2. Click "Refresh" to load videos from the videos folder
@@ -115,6 +129,68 @@ python face_detection_app.py
 6. Controls during playback:
    - Press **'q'** to quit
    - Press **'p'** to pause/resume
+
+---
+
+### Use Case 2: Mobile Phone Violation Detection
+
+#### 1. Prepare Alert Sound (Optional)
+
+The app will auto-generate an alert sound, but you can create a custom one:
+
+```bash
+source venv/bin/activate
+python create_alert_sound.py
+```
+
+Or replace `violation_alert.wav` with your own audio file.
+
+#### 2. Add Videos
+
+Use the same `videos/` folder as Use Case 1.
+
+#### 3. Run Mobile Violation Detection
+
+```bash
+# Activate virtual environment first
+source venv/bin/activate  # On Linux/Mac
+
+# Run the application
+python mobile_violation_detection.py
+```
+
+#### 4. Using Violation Detection App
+
+1. The application window will open
+2. Configure settings:
+   - Adjust **Confidence Threshold** (0.1 to 0.9)
+     - Lower = More sensitive (more detections)
+     - Higher = More strict (fewer false positives)
+   - Enable/Disable audio alerts
+3. Click "Test Alert Sound" to verify audio works
+4. Select a video from the dropdown
+5. Click "Start Detection"
+6. The video will play with detection:
+   - **Red boxes**: Mobile phone detected (violation)
+   - **Audio alert**: Plays when violation found
+   - **Counter**: Shows total violations
+7. Controls during playback:
+   - Press **'q'** to quit
+   - Press **'p'** to pause/resume
+   - Press **'s'** to save screenshot
+8. Screenshots are automatically saved in `violations/` folder
+
+---
+
+## Detection Details
+
+### Mobile Phone Detection
+- Uses **YOLOv8** (You Only Look Once) deep learning model
+- Detects cell phones in real-time video
+- Confidence threshold adjustable (default: 0.3 for high sensitivity)
+- 3-second cooldown between alerts to avoid spam
+- Processes every 2nd frame for better performance
+- **Voice Alert**: Says "Violation Found" when mobile phone detected
 
 ## Tips for Best Results
 
@@ -162,11 +238,29 @@ Make sure dlib is installed successfully first, then install face_recognition.
 - Ensure the video format is supported
 - Check if opencv-python is installed correctly
 
-## Future Enhancements (Use Cases 2 & 3)
+**No audio alert (Use Case 2)**:
+- Check if `violation_alert.wav` exists
+- Run `python create_alert_sound.py` to generate it
+- Verify system audio is not muted
+- Check "Enable Audio Alert" is checked
+- **For headless/server systems**: Audio may not work without sound card
+  - The app will still detect violations and save screenshots
+  - Visual alerts (red boxes and counter) will still work
+  - Consider using a system with audio output for alerts
 
-This is the first use case. Additional features will be added:
-- Use Case 2: TBD
-- Use Case 3: TBD
+**YOLO model not loading (Use Case 2)**:
+- First run will download the model automatically
+- Requires internet connection for initial download
+- Model will be cached for future use
+
+## Project Applications
+
+## Future Enhancements (Use Case 3)
+
+This project currently implements two use cases:
+- ✅ Use Case 1: Face Detection & Recognition
+- ✅ Use Case 2: Mobile Phone Violation Detection
+- ⏳ Use Case 3: TBD
 
 ## License
 
