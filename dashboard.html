@@ -1,0 +1,1450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sakshi.ai Dashboard</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #0f1112; color: #ddd; }
+    .container { display: grid; grid-template-columns: 260px 1fr; gap: 24px; min-height: 100vh; padding: 18px; }
+    .sidebar { background: #121314; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 18px; height: fit-content; position: sticky; top: 18px; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .brand .logo { width: 100%; height: 70px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .brand .logo img { width: 100%; height: 100%; object-fit: contain; }
+    .brand h1 { font-size: 16px; color: #fff; }
+    .nav { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+    .nav .section-title { font-size: 12px; color: #8a8f96; margin: 8px 6px; }
+    .nav a { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; color: #d7d8da; text-decoration: none; cursor: pointer; transition: all 0.2s; }
+    .nav a:hover { background: rgba(255,255,255,0.05); }
+    .nav a.active { background: linear-gradient(90deg, #1640ff, #2b3bff); color: white; }
+    .nav .icon { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .main { overflow: auto; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; margin-bottom: 20px; }
+    .title h2 { font-size: 30px; color: #f1f3f5; }
+    .sub { color: #9aa0a6; font-size: 13px; }
+    .right { display: flex; align-items: center; gap: 8px; }
+    .pill { padding: 6px 12px; border-radius: 8px; font-size: 12px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; padding: 10px 6px; }
+    .card { background: #17181a; padding: 20px; border-radius: 12px; min-height: 110px; cursor: pointer; transition: transform 0.2s; }
+    .card:hover { transform: translateY(-2px); }
+    .card h3 { color: #9aa0a6; font-size: 13px; margin-bottom: 6px; }
+    .big { font-size: 28px; font-weight: 700; color: #fff; }
+    .camera-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 10px 6px; margin-top: 20px; }
+    .cam-card { background: #17181a; border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
+    .cam-card:hover { transform: translateY(-2px); }
+    .cam-preview { height: 240px; background: #000; display: flex; align-items: center; justify-content: center; }
+    .cam-preview img { width: 100%; height: 100%; object-fit: contain; }
+    .cam-meta { padding: 14px; }
+    .cam-meta strong { color: #fff; font-size: 15px; }
+    .cam-meta .muted { color: #6d7377; font-size: 12px; margin-top: 4px; }
+    .back-btn { background: #17181a; padding: 10px 16px; border-radius: 8px; cursor: pointer; color: #ddd; border: 1px solid #2a2d31; font-size: 14px; margin: 0 6px 20px; display: inline-block; }
+    .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 10px 6px; margin: 20px 0; }
+    .stat-card { background: #17181a; padding: 18px; border-radius: 8px; }
+    .stat-card h4 { color: #9aa0a6; font-size: 12px; margin-bottom: 8px; }
+    .stat-card .value { font-size: 32px; font-weight: 700; color: #fff; }
+    .video-container { padding: 10px 6px; }
+    .video-box { background: #17181a; border-radius: 12px; overflow: hidden; max-width: 900px; margin: 0 auto; }
+    .video-feed { width: 100%; background: #000; }
+    .video-feed img { width: 100%; height: auto; display: block; }
+    .video-meta { padding: 16px; border-top: 1px solid #2a2d31; }
+    .report-section { background: #17181a; padding: 20px; border-radius: 12px; margin: 15px 6px; }
+    .report-section h3 { color: #e6e8ea; margin-bottom: 15px; }
+    .report-controls { display: flex; gap: 10px; margin-bottom: 20px; }
+    .report-controls input { background: #0f1112; border: 1px solid #2a2d31; color: #ddd; padding: 8px 12px; border-radius: 6px; }
+    .report-controls button { background: linear-gradient(90deg, #1640ff, #2b3bff); color: white; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #2a2d31; padding: 10px; text-align: left; font-size: 13px; }
+    th { background: #121314; color: #9aa0a6; }
+    td { background: #17181a; }
+    .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 15px; }
+    .history-item { border: 1px solid #2a2d31; border-radius: 8px; overflow: hidden; background: #17181a; cursor: pointer; }
+    .history-item img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #000; }
+    .history-item-info { padding: 8px; font-size: 11px; }
+    .pagination { margin-top: 15px; text-align: center; }
+    .pagination button { padding: 8px 16px; margin: 0 5px; background: #17181a; color: #ddd; border: 1px solid #2a2d31; border-radius: 6px; cursor: pointer; }
+    .lightbox { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); align-items: center; justify-content: center; }
+    .lightbox.show { display: flex; }
+    .lightbox img { max-width: 90%; max-height: 90%; }
+    .lightbox-close { position: absolute; top: 20px; right: 35px; color: #fff; font-size: 40px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"><img src="/static/Sakshi.png" alt="Sakshi.ai Logo"></div>
+      </div>
+      <nav class="nav">
+        <div class="section-title">NAVIGATION</div>
+        <a href="#" data-view="overview" class="nav-link active">
+          <div class="icon">🏠</div><div>Overview</div>
+        </a>
+        <div class="section-title">APPLICATIONS</div>
+        <a href="#" data-view="people-counter" class="nav-link">
+          <div class="icon">👥</div><div>People Counter</div>
+        </a>
+        <a href="#" data-view="queue-monitor" class="nav-link">
+          <div class="icon">⏱️</div><div>Queue Monitor</div>
+        </a>
+        <a href="#" data-view="kitchen-compliance" class="nav-link">
+          <div class="icon">👨‍🍳</div><div>Kitchen Compliance</div>
+        </a>
+        <a href="#" data-view="occupancy" class="nav-link">
+          <div class="icon">📊</div><div>Occupancy</div>
+        </a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="topbar">
+        <div class="title">
+          <h2 id="page-title">Dashboard Overview</h2>
+          <div class="sub" id="page-subtitle">Real-time monitoring</div>
+        </div>
+        <div class="right">
+          <a href="/logout" class="pill" style="background:#26a44b;color:#fff;text-decoration:none">Logout</a>
+        </div>
+      </div>
+      <div id="overview-section" class="section active">
+        <section class="metrics" style="grid-template-columns: repeat(2, 1fr); gap: 20px;">
+          <div class="card" onclick="switchView('people-counter')" style="min-height: 200px; cursor: pointer;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">📅 Peak Day (This Week)</h3>
+            <div style="text-align: center; margin: 20px 0;">
+              <div id="ov-pc-peak-day" style="color: #f59e0b; font-size: 42px; font-weight: 700;">N/A</div>
+              <div style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">Highest Traffic Day</div>
+            </div>
+            <div style="margin-top: 15px; padding: 15px 0;">
+              <div style="color: #9aa0a6; font-size: 12px; margin-bottom: 10px;">Weekly Footfall</div>
+              <div id="ov-week-chart" style="height: 80px; display: flex; align-items: end; gap: 4px; background: #121314; border-radius: 6px; padding: 10px; position: relative;">
+                <!-- Week bars will be dynamically generated -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" onclick="switchView('people-counter')" style="min-height: 200px; cursor: pointer;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">⏰ Peak Hour (Today)</h3>
+            <div style="text-align: center; margin: 20px 0;">
+              <div id="ov-pc-peak-hour" style="color: #3b82f6; font-size: 42px; font-weight: 700;">N/A</div>
+              <div style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">Busiest Hour</div>
+            </div>
+            <div style="margin-top: 15px; padding: 15px 0;">
+              <div style="color: #9aa0a6; font-size: 12px; margin-bottom: 10px;">Hourly Traffic</div>
+              <div id="ov-hour-chart" style="height: 80px; display: flex; align-items: end; gap: 1px; background: #121314; border-radius: 6px; padding: 10px;">
+                <!-- Hour bars will be dynamically generated -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" onclick="switchView('people-counter')" style="min-height: 280px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">👥 People Counter</h3>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+              <div>
+                <div style="color: #26a44b; font-size: 40px; font-weight: 700;" id="ov-in">0</div>
+                <div style="color: #9aa0a6; font-size: 13px;">IN Count</div>
+              </div>
+              <div>
+                <div style="color: #e04b4b; font-size: 40px; font-weight: 700;" id="ov-out">0</div>
+                <div style="color: #9aa0a6; font-size: 13px;">OUT Count</div>
+              </div>
+              <div>
+                <div style="color: #3b82f6; font-size: 40px; font-weight: 700;" id="ov-net">0</div>
+                <div style="color: #9aa0a6; font-size: 13px;">Net Count</div>
+              </div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #2a2d31;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: #9aa0a6; font-size: 12px;">Today's Activity</span>
+                <span style="color: #26a44b; font-size: 12px;">Live</span>
+              </div>
+              <div id="ov-hourly-chart" style="height: 100px; background: #121314; border-radius: 6px; display: flex; align-items: end; gap: 1px; padding: 8px; position: relative;">
+                <!-- Bars will be dynamically generated -->
+              </div>
+            </div>
+            <div style="margin-top:12px;color:#3b82f6;font-size:14px;">Click to view details →</div>
+          </div>
+          
+          <div class="card" onclick="switchView('queue-monitor')" style="min-height: 280px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">⏱️ Queue Monitor</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+              <div>
+                <div id="ov-queue-count" style="color: #fff; font-size: 36px; font-weight: 700;">0</div>
+                <div style="color: #9aa0a6; font-size: 13px;">People Waiting</div>
+              </div>
+              <div>
+                <div id="ov-counter-count" style="color: #f59e0b; font-size: 36px; font-weight: 700;">0</div>
+                <div style="color: #9aa0a6; font-size: 13px;">At Counter</div>
+              </div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #2a2d31;">
+              <div style="color: #9aa0a6; font-size: 12px; margin-bottom: 8px;">Queue Status</div>
+              <div style="background: #121314; border-radius: 6px; padding: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                  <span style="font-size: 13px;">Current Queue</span>
+                  <span id="ov-queue-status" style="color: #26a44b; font-size: 13px;">Empty</span>
+                </div>
+                <div style="height: 6px; background: #2a2d31; border-radius: 3px; overflow: hidden;">
+                  <div id="ov-queue-bar" style="width: 0%; height: 100%; background: #26a44b; transition: all 0.3s ease;"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Served Today and Peak Count temporarily hidden -->
+            <!--
+            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: #121314; padding: 10px; border-radius: 6px; text-align: center;">
+                <div id="ov-queue-served" style="font-size: 20px; color: #fff; font-weight: 600;">0</div>
+                <div style="font-size: 11px; color: #9aa0a6;">Served Today</div>
+              </div>
+              <div style="background: #121314; padding: 10px; border-radius: 6px; text-align: center;">
+                <div id="ov-queue-peak" style="font-size: 20px; color: #f59e0b; font-weight: 600;">0</div>
+                <div style="font-size: 11px; color: #9aa0a6;">Peak Count</div>
+              </div>
+            </div>
+            -->
+            <div style="margin-top:12px;color:#3b82f6;font-size:14px;">Click to view details →</div>
+          </div>
+          
+          <div class="card" onclick="switchView('kitchen-compliance')" style="min-height: 280px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">👨‍🍳 Kitchen Compliance</h3>
+            <div style="margin-top: 10px;">
+              <div onclick="filterKitchenViolations('cap')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #1a1d21; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#252830'" onmouseout="this.style.background='#1a1d21'">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 24px;">🧢</span>
+                  <span style="font-size: 14px; color: #e0e0e0;">Chef Cap</span>
+                </div>
+                <span id="ov-kitchen-cap" style="color: #9aa0a6; font-size: 13px; font-weight: 600;"></span>
+              </div>
+              
+              <div onclick="filterKitchenViolations('apron')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #1a1d21; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#252830'" onmouseout="this.style.background='#1a1d21'">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 24px;">👔</span>
+                  <span style="font-size: 14px; color: #e0e0e0;">Apron</span>
+                </div>
+                <span id="ov-kitchen-apron" style="color: #9aa0a6; font-size: 13px; font-weight: 600;"></span>
+              </div>
+              
+              <div onclick="filterKitchenViolations('gloves')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #1a1d21; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#252830'" onmouseout="this.style.background='#1a1d21'">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 24px;">🧤</span>
+                  <span style="font-size: 14px; color: #e0e0e0;">Gloves</span>
+                </div>
+                <span id="ov-kitchen-gloves" style="color: #9aa0a6; font-size: 13px; font-weight: 600;"></span>
+              </div>
+              
+              <div onclick="filterKitchenViolations('uniform')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #1a1d21; border-radius: 8px; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#252830'" onmouseout="this.style.background='#1a1d21'">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 24px;">👕</span>
+                  <span style="font-size: 14px; color: #e0e0e0;">Uniform</span>
+                </div>
+                <span id="ov-kitchen-uniform" style="color: #9aa0a6; font-size: 13px; font-weight: 600;"></span>
+              </div>
+            </div>
+            <div onclick="event.stopPropagation(); clearKitchenFilter(); switchView('kitchen-compliance');" style="margin-top:15px;color:#3b82f6;font-size:14px;cursor:pointer;">Click to view details →</div>
+          </div>
+          
+          <div class="card" onclick="switchView('occupancy')" style="min-height: 280px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px;">📊 Kitchen Attendance</h3>
+            <div style="text-align: center; margin: 20px 0;">
+              <div id="ov-occ-current" style="color: #fff; font-size: 48px; font-weight: 700;">0</div>
+              <div style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">Current Attendance</div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #2a2d31;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: #9aa0a6; font-size: 12px;">Capacity</span>
+                <span id="ov-occ-percentage" style="color: #fff; font-size: 12px;">0%</span>
+              </div>
+              <div style="height: 12px; background: #121314; border-radius: 6px; overflow: hidden;">
+                <div id="ov-occ-bar" style="width: 8%; min-width: 8%; height: 100%; background: linear-gradient(90deg, #e04b4b, #f59e0b); transition: all 0.3s ease;"></div>
+              </div>
+            </div>
+            <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div style="background: #121314; padding: 10px; border-radius: 6px; text-align: center;">
+                <div id="ov-occ-max" style="font-size: 20px; color: #26a44b; font-weight: 600;">0</div>
+                <div style="font-size: 11px; color: #9aa0a6;">Max Today</div>
+              </div>
+              <div style="background: #121314; padding: 10px; border-radius: 6px; text-align: center;">
+                <div id="ov-occ-avg" style="font-size: 20px; color: #3b82f6; font-weight: 600;">0</div>
+                <div style="font-size: 11px; color: #9aa0a6;">Avg Today</div>
+              </div>
+            </div>
+            <div style="margin-top:12px;color:#3b82f6;font-size:14px;">Click to view details →</div>
+          </div>
+        </section>
+      </div>
+      <div id="people-counter-section" class="section">
+        <button class="back-btn" onclick="switchView('overview')">← Back to Overview</button>
+        <div class="stats-row">
+          <div class="stat-card">
+            <h4>IN Count</h4>
+            <div class="value" style="color:#26a44b" id="pc-in">0</div>
+          </div>
+          <div class="stat-card">
+            <h4>OUT Count</h4>
+            <div class="value" style="color:#e04b4b" id="pc-out">0</div>
+          </div>
+          <div class="stat-card">
+            <h4>Net Count</h4>
+            <div class="value" style="color:#3b82f6" id="pc-net">0</div>
+          </div>
+        </div>
+        <div class="video-container">
+          <div class="video-box">
+            <div class="video-feed">
+              <img src="/video_feed/PeopleCounter/cam_3df702bb28" alt="Loading...">
+            </div>
+            <div class="video-meta"><strong>Main Entrance Camera</strong></div>
+          </div>
+        </div>
+        <div class="report-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">📊 Daily Report</h3>
+            <button id="download-report-btn" onclick="downloadReport()" style="display: none; padding: 8px 16px; background: #26a44b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#1e8a3d'" onmouseout="this.style.background='#26a44b'">
+              📥 Download CSV
+            </button>
+          </div>
+          <div class="report-controls">
+            <input type="date" id="pc-date" />
+            <button onclick="loadReport()">Load Report</button>
+          </div>
+          <div id="pc-report"></div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px;">
+          <div class="card" style="padding: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #f59e0b;">📅 Peak Day (This Week)</h3>
+            <div style="text-align: center; margin: 15px 0;">
+              <div id="pc-peak-day" style="color: #f59e0b; font-size: 36px; font-weight: 700;">N/A</div>
+              <div id="pc-peak-day-count" style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">No data yet</div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #2a2d31;">
+              <div style="color: #9aa0a6; font-size: 12px; margin-bottom: 10px;">Weekly Footfall</div>
+              <div id="pc-week-chart" style="height: 80px; display: flex; align-items: end; gap: 4px; background: #121314; border-radius: 6px; padding: 10px; position: relative;">
+                <!-- Week bars will be dynamically generated -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" style="padding: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #3b82f6;">⏰ Peak Hour (Today)</h3>
+            <div style="text-align: center; margin: 15px 0;">
+              <div id="pc-peak-hour" style="color: #3b82f6; font-size: 36px; font-weight: 700;">N/A</div>
+              <div id="pc-peak-hour-count" style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">No data yet</div>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #2a2d31;">
+              <div style="color: #9aa0a6; font-size: 12px; margin-bottom: 10px;">Hourly Traffic</div>
+              <div id="pc-hour-chart" style="height: 100px; display: flex; align-items: end; gap: 1px; background: #121314; border-radius: 6px; padding: 10px;">
+                <!-- Hour bars will be dynamically generated -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="queue-monitor-section" class="section">
+        <button class="back-btn" onclick="switchView('overview')">← Back</button>
+        <div class="video-container">
+          <div class="video-box">
+            <div class="video-feed">
+              <img src="/video_feed/QueueMonitor/cam_f822b0bf4e">
+            </div>
+            <div class="video-meta"><strong>Queue Monitor</strong></div>
+          </div>
+        </div>
+        
+        <!-- Live Queue & Counter Stats Cards -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+          <div class="card" style="text-align: center; padding: 20px;">
+            <div style="font-size: 14px; color: #9aa0a6; margin-bottom: 10px;">Current Queue</div>
+            <div id="qm-queue-count" style="font-size: 48px; font-weight: 700; color: #3b82f6;">0</div>
+            <div style="font-size: 12px; color: #9aa0a6; margin-top: 5px;">People waiting</div>
+          </div>
+          
+          <div class="card" style="text-align: center; padding: 20px;">
+            <div style="font-size: 14px; color: #9aa0a6; margin-bottom: 10px;">At Counter</div>
+            <div id="qm-counter-count" style="font-size: 48px; font-weight: 700; color: #26a44b;">0</div>
+            <div style="font-size: 12px; color: #9aa0a6; margin-top: 5px;">Being served</div>
+          </div>
+        </div>
+        
+        <div class="report-section">
+          <h3>History</h3>
+          <div class="history-grid" id="qm-history"></div>
+          <div class="pagination" id="qm-pagination"></div>
+        </div>
+      </div>
+      <div id="kitchen-compliance-section" class="section">
+        <button class="back-btn" onclick="switchView('overview')">← Back</button>
+        <div class="video-container">
+          <div class="video-box">
+            <div class="video-feed">
+              <img src="/video_feed/KitchenCompliance/cam_c6ef0fb589">
+            </div>
+            <div class="video-meta"><strong>Kitchen Compliance</strong></div>
+          </div>
+        </div>
+        <div class="report-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">History</h3>
+            <button id="clear-filter-btn" onclick="clearKitchenFilter()" style="display: none; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Clear Filter</button>
+          </div>
+          <div class="history-grid" id="kc-history"></div>
+          <div class="pagination" id="kc-pagination"></div>
+        </div>
+      </div>
+      <div id="occupancy-section" class="section">
+        <button class="back-btn" onclick="switchView('overview')">← Back</button>
+        
+        <!-- Status Banner -->
+        <div id="occupancy-status-banner" style="display: none; padding: 15px 20px; margin-bottom: 20px; border-radius: 8px; font-weight: 600; font-size: 16px; text-align: center; animation: fadeIn 0.3s;"></div>
+        
+        <div class="video-container">
+          <div class="video-box">
+            <div class="video-feed">
+              <img src="/video_feed/OccupancyMonitor/cam_d77ace3828">
+            </div>
+            <div class="video-meta"><strong>Kitchen Attendance</strong></div>
+          </div>
+        </div>
+        <div class="report-section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">📋 Schedule Management</h3>
+            <div style="display: flex; gap: 10px;">
+              <button onclick="downloadTemplate()" style="padding: 8px 16px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">
+                📥 Download Template
+              </button>
+              <button onclick="promptScheduleUpload()" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                📤 Import Schedule
+              </button>
+            </div>
+          </div>
+          <div style="background: #1a1d21; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="color: #9aa0a6; font-size: 13px; margin: 0; margin-bottom: 8px;"><strong>How to use:</strong></p>
+            <ol style="color: #9aa0a6; font-size: 13px; margin: 0; padding-left: 20px;">
+              <li>Click "Download Template" to get the correct CSV format</li>
+              <li>Edit the template with your required attendance numbers (0-100)</li>
+              <li>Click "Import Schedule" to upload your completed schedule</li>
+              <li>View and edit the schedule in the grid interface</li>
+            </ol>
+          </div>
+        </div>
+        <div class="report-section">
+          <h3>History</h3>
+          <div class="history-grid" id="occ-history"></div>
+          <div class="pagination" id="occ-pagination"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close">&times;</span>
+    <img id="lightbox-img" src="">
+  </div>
+  
+  <!-- Schedule Modal -->
+  <div id="schedule-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; overflow: auto;">
+    <div style="background: #1a1d21; margin: 20px auto; max-width: 95%; border-radius: 8px; padding: 0; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #2a2d31;">
+        <h2 style="margin: 0; color: #fff;">📋 Kitchen Attendance Schedule</h2>
+        <button onclick="closeScheduleModal()" style="background: none; border: none; color: #9aa0a6; font-size: 28px; cursor: pointer; padding: 0; line-height: 1;">&times;</button>
+      </div>
+      <div style="padding: 20px;">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button onclick="downloadTemplate()" style="padding: 8px 16px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            📥 Download Template
+          </button>
+          <button onclick="promptScheduleUpload()" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            📤 Import New Schedule
+          </button>
+          <button onclick="saveSchedule()" style="padding: 8px 16px; background: #26a44b; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
+            💾 Save Schedule
+          </button>
+        </div>
+        <div id="schedule-grid" style="overflow: auto; max-height: 60vh;"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+const channels = {
+  'PeopleCounter': 'cam_3df702bb28',
+  'QueueMonitor': 'cam_f822b0bf4e',
+  'KitchenCompliance': 'cam_c6ef0fb589',
+  'OccupancyMonitor': 'cam_d77ace3828'
+};
+let socket = io();
+socket.on('connect', () => console.log('Connected'));
+
+// People Counter updates
+socket.on('count_update', (data) => {
+  if (data.channel_id === channels.PeopleCounter) {
+    const inC = data.in_count || 0;
+    const outC = data.out_count || 0;
+    const netC = inC - outC;
+    // Update overview section
+    document.getElementById('ov-in').textContent = inC;
+    document.getElementById('ov-out').textContent = outC;
+    document.getElementById('ov-net').textContent = netC;
+    // Update detail section
+    document.getElementById('pc-in').textContent = inC;
+    document.getElementById('pc-out').textContent = outC;
+    document.getElementById('pc-net').textContent = netC;
+    
+    // Update hourly bar chart
+    if (data.hourly_data && data.hourly_data.length === 24) {
+      updateHourlyChart(data.hourly_data);
+    }
+  }
+});
+
+function updateHourlyChart(hourlyData) {
+  const chartContainer = document.getElementById('ov-hourly-chart');
+  if (!chartContainer) return;
+  
+  // Find max value for scaling
+  const maxCount = Math.max(...hourlyData, 1);
+  
+  // Clear existing bars
+  chartContainer.innerHTML = '';
+  
+  // Create bars for each hour
+  hourlyData.forEach((count, hour) => {
+    const heightPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      flex: 1; 
+      background: ${count > 0 ? '#26a44b' : '#2a2d31'}; 
+      border-radius: 3px; 
+      height: ${heightPercent}%;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    `;
+    
+    // Add tooltip
+    const tooltip = document.createElement('div');
+    tooltip.style.cssText = `
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1d21;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+      z-index: 10;
+      margin-bottom: 5px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    tooltip.innerHTML = `<strong>${hour}:00</strong><br>IN: ${count}`;
+    bar.appendChild(tooltip);
+    
+    // Show tooltip on hover
+    bar.addEventListener('mouseenter', () => {
+      tooltip.style.opacity = '1';
+      bar.style.background = count > 0 ? '#2ecc71' : '#3a3d41';
+    });
+    bar.addEventListener('mouseleave', () => {
+      tooltip.style.opacity = '0';
+      bar.style.background = count > 0 ? '#26a44b' : '#2a2d31';
+    });
+    
+    chartContainer.appendChild(bar);
+  });
+}
+
+// Load peak analytics (peak day of week and peak hour of today)
+function loadPeakAnalytics() {
+  fetch(`/api/peak_analytics/${channels.PeopleCounter}`)
+    .then(response => response.json())
+    .then(data => {
+      // Update Peak Day
+      const peakDayEl = document.getElementById('ov-pc-peak-day');
+      if (peakDayEl && data.peak_day) {
+        peakDayEl.textContent = data.peak_day.count > 0 
+          ? `${data.peak_day.name} (${data.peak_day.count})` 
+          : 'N/A';
+      }
+      
+      // Update Peak Hour - convert to time period format
+      const peakHourEl = document.getElementById('ov-pc-peak-hour');
+      if (peakHourEl && data.peak_hour) {
+        if (data.peak_hour.count > 0) {
+          const timePeriod = convertHourToTimePeriod(data.peak_hour.label);
+          peakHourEl.textContent = `${timePeriod} (${data.peak_hour.count})`;
+        } else {
+          peakHourEl.textContent = 'N/A';
+        }
+      }
+      
+      // Render week chart
+      if (data.peak_day && data.peak_day.week_data) {
+        renderWeekChart(data.peak_day.week_data);
+        renderPCWeekChart(data.peak_day.week_data);
+      }
+      
+      // Render hour chart
+      if (data.peak_hour && data.peak_hour.hourly_data) {
+        renderHourChart(data.peak_hour.hourly_data);
+        renderPCHourChart(data.peak_hour.hourly_data);
+      }
+      
+      // Update People Counter detail page
+      const pcPeakDayEl = document.getElementById('pc-peak-day');
+      const pcPeakHourEl = document.getElementById('pc-peak-hour');
+      const pcPeakDayCountEl = document.getElementById('pc-peak-day-count');
+      const pcPeakHourCountEl = document.getElementById('pc-peak-hour-count');
+      
+      if (pcPeakDayEl && data.peak_day) {
+        pcPeakDayEl.textContent = data.peak_day.count > 0 ? data.peak_day.name : 'N/A';
+      }
+      if (pcPeakHourEl && data.peak_hour) {
+        if (data.peak_hour.count > 0) {
+          const timePeriod = convertHourToTimePeriod(data.peak_hour.label);
+          pcPeakHourEl.textContent = timePeriod;
+        } else {
+          pcPeakHourEl.textContent = 'N/A';
+        }
+      }
+      if (pcPeakDayCountEl && data.peak_day) {
+        pcPeakDayCountEl.textContent = data.peak_day.count > 0 ? `${data.peak_day.count} visitors` : 'No data yet';
+      }
+      if (pcPeakHourCountEl && data.peak_hour) {
+        pcPeakHourCountEl.textContent = data.peak_hour.count > 0 ? `${data.peak_hour.count} visitors` : 'No data yet';
+      }
+    })
+    .catch(error => console.error('Error loading peak analytics:', error));
+}
+
+// Helper function to convert hour label to time period format
+function convertHourToTimePeriod(hourLabel) {
+  // Convert "12 PM" to "12:00-12:59"
+  const hourMap = {
+    '12 AM': '00:00-00:59', '1 AM': '01:00-01:59', '2 AM': '02:00-02:59', '3 AM': '03:00-03:59',
+    '4 AM': '04:00-04:59', '5 AM': '05:00-05:59', '6 AM': '06:00-06:59', '7 AM': '07:00-07:59',
+    '8 AM': '08:00-08:59', '9 AM': '09:00-09:59', '10 AM': '10:00-10:59', '11 AM': '11:00-11:59',
+    '12 PM': '12:00-12:59', '1 PM': '13:00-13:59', '2 PM': '14:00-14:59', '3 PM': '15:00-15:59',
+    '4 PM': '16:00-16:59', '5 PM': '17:00-17:59', '6 PM': '18:00-18:59', '7 PM': '19:00-19:59',
+    '8 PM': '20:00-20:59', '9 PM': '21:00-21:59', '10 PM': '22:00-22:59', '11 PM': '23:00-23:59'
+  };
+  return hourMap[hourLabel] || hourLabel;
+}
+
+function renderWeekChart(weekData) {
+  const chartContainer = document.getElementById('ov-week-chart');
+  if (!chartContainer) return;
+  
+  chartContainer.innerHTML = '';
+  
+  // If no data, show placeholder
+  if (!weekData || weekData.length === 0) {
+    const day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    weekData = day_names.map(day => ({ day: day, count: 0 }));
+  }
+  
+  // Find max value for scaling
+  const maxCount = Math.max(...weekData.map(d => d.count), 1);
+  
+  weekData.forEach(dayData => {
+    const heightPercent = maxCount > 0 && dayData.count > 0 ? (dayData.count / maxCount) * 100 : 10;
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      flex: 1;
+      background: ${dayData.count > 0 ? '#f59e0b' : '#2a2d31'};
+      border-radius: 2px;
+      height: ${heightPercent}%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    
+    // Add day label at bottom
+    const label = document.createElement('div');
+    label.style.cssText = `
+      position: absolute;
+      bottom: -18px;
+      font-size: 9px;
+      color: #9aa0a6;
+      white-space: nowrap;
+    `;
+    label.textContent = dayData.day;
+    bar.appendChild(label);
+    
+    // Tooltip
+    bar.title = `${dayData.day}: ${dayData.count} visitors`;
+    bar.addEventListener('mouseenter', () => {
+      bar.style.background = dayData.count > 0 ? '#fbbf24' : '#3a3d41';
+    });
+    bar.addEventListener('mouseleave', () => {
+      bar.style.background = dayData.count > 0 ? '#f59e0b' : '#2a2d31';
+    });
+    
+    chartContainer.appendChild(bar);
+  });
+}
+
+function renderHourChart(hourlyData) {
+  const chartContainer = document.getElementById('ov-hour-chart');
+  if (!chartContainer) return;
+  
+  chartContainer.innerHTML = '';
+  
+  // Create 24-hour data structure with time periods
+  const hourData24 = [];
+  for (let h = 0; h < 24; h++) {
+    const timePeriod = String(h).padStart(2, '0') + ':00-' + String(h).padStart(2, '0') + ':59';
+    const hour12Label = h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h === 12 ? '12 PM' : (h - 12) + ' PM';
+    
+    // Find matching data from hourlyData
+    let count = 0;
+    if (hourlyData && hourlyData.length > 0) {
+      const match = hourlyData.find(d => {
+        const dataHour12 = d.hour.trim();
+        return dataHour12 === hour12Label;
+      });
+      count = match ? match.count : 0;
+    }
+    
+    hourData24.push({ timePeriod, hour12: hour12Label, count });
+  }
+  
+  // Find max value for scaling
+  const maxCount = Math.max(...hourData24.map(d => d.count), 1);
+  
+  hourData24.forEach((data, index) => {
+    const heightPercent = maxCount > 0 && data.count > 0 ? (data.count / maxCount) * 100 : 5;
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      flex: 1;
+      background: ${data.count > 0 ? '#3b82f6' : '#2a2d31'};
+      border-radius: 2px;
+      height: ${heightPercent}%;
+      min-height: ${data.count > 0 ? '20px' : '5px'};
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    `;
+    
+    // Add label for every 4th hour
+    if (index % 4 === 0) {
+      const label = document.createElement('div');
+      label.style.cssText = `
+        position: absolute;
+        bottom: -18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 8px;
+        color: #9aa0a6;
+        white-space: nowrap;
+      `;
+      label.textContent = data.hour12.replace(' ', '');
+      bar.appendChild(label);
+    }
+    
+    // Tooltip with time period
+    bar.title = `${data.timePeriod}: ${data.count} visitors`;
+    bar.addEventListener('mouseenter', () => {
+      bar.style.background = data.count > 0 ? '#60a5fa' : '#3a3d41';
+    });
+    bar.addEventListener('mouseleave', () => {
+      bar.style.background = data.count > 0 ? '#3b82f6' : '#2a2d31';
+    });
+    
+    chartContainer.appendChild(bar);
+  });
+}
+
+// Render week chart for People Counter detail page
+function renderPCWeekChart(weekData) {
+  const chartContainer = document.getElementById('pc-week-chart');
+  if (!chartContainer) return;
+  
+  chartContainer.innerHTML = '';
+  
+  // If no data, show placeholder
+  if (!weekData || weekData.length === 0) {
+    const day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    weekData = day_names.map(day => ({ day: day, count: 0 }));
+  }
+  
+  // Find max value for scaling
+  const maxCount = Math.max(...weekData.map(d => d.count), 1);
+  
+  weekData.forEach(dayData => {
+    const heightPercent = maxCount > 0 && dayData.count > 0 ? (dayData.count / maxCount) * 100 : 10;
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      flex: 1;
+      background: ${dayData.count > 0 ? '#f59e0b' : '#2a2d31'};
+      border-radius: 2px;
+      height: ${heightPercent}%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    `;
+    
+    // Add day label at bottom
+    const label = document.createElement('div');
+    label.style.cssText = `
+      position: absolute;
+      bottom: -18px;
+      font-size: 9px;
+      color: #9aa0a6;
+      white-space: nowrap;
+    `;
+    label.textContent = dayData.day;
+    bar.appendChild(label);
+    
+    // Tooltip
+    bar.title = `${dayData.day}: ${dayData.count} visitors`;
+    bar.addEventListener('mouseenter', () => {
+      bar.style.background = dayData.count > 0 ? '#fbbf24' : '#3a3d41';
+    });
+    bar.addEventListener('mouseleave', () => {
+      bar.style.background = dayData.count > 0 ? '#f59e0b' : '#2a2d31';
+    });
+    
+    chartContainer.appendChild(bar);
+  });
+}
+
+// Render hour chart for People Counter detail page
+function renderPCHourChart(hourlyData) {
+  const chartContainer = document.getElementById('pc-hour-chart');
+  if (!chartContainer) return;
+  
+  chartContainer.innerHTML = '';
+  
+  // Create 24-hour data structure with time periods
+  const hourData24 = [];
+  for (let h = 0; h < 24; h++) {
+    const timePeriod = String(h).padStart(2, '0') + ':00-' + String(h).padStart(2, '0') + ':59';
+    const hour12Label = h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h === 12 ? '12 PM' : (h - 12) + ' PM';
+    
+    // Find matching data from hourlyData
+    let count = 0;
+    if (hourlyData && hourlyData.length > 0) {
+      const match = hourlyData.find(d => {
+        const dataHour12 = d.hour.trim();
+        return dataHour12 === hour12Label;
+      });
+      count = match ? match.count : 0;
+    }
+    
+    hourData24.push({ timePeriod, hour12: hour12Label, count });
+  }
+  
+  // Find max value for scaling
+  const maxCount = Math.max(...hourData24.map(d => d.count), 1);
+  
+  hourData24.forEach((data, index) => {
+    const heightPercent = maxCount > 0 && data.count > 0 ? (data.count / maxCount) * 100 : 5;
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      flex: 1;
+      background: ${data.count > 0 ? '#3b82f6' : '#2a2d31'};
+      border-radius: 2px;
+      height: ${heightPercent}%;
+      min-height: ${data.count > 0 ? '20px' : '5px'};
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    `;
+    
+    // Add label for every 4th hour
+    if (index % 4 === 0) {
+      const label = document.createElement('div');
+      label.style.cssText = `
+        position: absolute;
+        bottom: -18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 8px;
+        color: #9aa0a6;
+        white-space: nowrap;
+      `;
+      label.textContent = data.hour12.replace(' ', '');
+      bar.appendChild(label);
+    }
+    
+    // Tooltip with time period
+    bar.title = `${data.timePeriod}: ${data.count} visitors`;
+    bar.addEventListener('mouseenter', () => {
+      bar.style.background = data.count > 0 ? '#60a5fa' : '#3a3d41';
+    });
+    bar.addEventListener('mouseleave', () => {
+      bar.style.background = data.count > 0 ? '#3b82f6' : '#2a2d31';
+    });
+    
+    chartContainer.appendChild(bar);
+  });
+}
+
+// Queue Monitor updates
+socket.on('queue_update', (data) => {
+  if (data.channel_id === channels.QueueMonitor) {
+    const queueCount = data.queue || 0;
+    const counterCount = data.counter || 0;
+    const servedToday = data.served_today || 0;
+    const peakCount = data.peak_count || 0;
+    
+    // Update overview queue count
+    const queueCountEl = document.getElementById('ov-queue-count');
+    if (queueCountEl) queueCountEl.textContent = queueCount;
+    
+    // Update overview counter count
+    const counterCountEl = document.getElementById('ov-counter-count');
+    if (counterCountEl) counterCountEl.textContent = counterCount;
+    
+    // Update overview served today
+    const servedEl = document.getElementById('ov-queue-served');
+    if (servedEl) servedEl.textContent = servedToday;
+    
+    // Update overview peak count
+    const peakEl = document.getElementById('ov-queue-peak');
+    if (peakEl) peakEl.textContent = peakCount;
+    
+    // Update Queue Monitor detail page cards
+    const qmQueueEl = document.getElementById('qm-queue-count');
+    if (qmQueueEl) qmQueueEl.textContent = queueCount;
+    
+    const qmCounterEl = document.getElementById('qm-counter-count');
+    if (qmCounterEl) qmCounterEl.textContent = counterCount;
+    
+    // Update queue status text and color
+    const statusEl = document.getElementById('ov-queue-status');
+    const barEl = document.getElementById('ov-queue-bar');
+    
+    if (statusEl && barEl) {
+      let statusText, statusColor, barColor;
+      const percentage = Math.min((queueCount / 10) * 100, 100);
+      
+      if (queueCount === 0) {
+        statusText = 'Empty';
+        statusColor = '#26a44b';
+        barColor = '#26a44b';
+      } else if (queueCount <= 3) {
+        statusText = 'Normal';
+        statusColor = '#26a44b';
+        barColor = '#26a44b';
+      } else if (queueCount <= 6) {
+        statusText = 'Busy';
+        statusColor = '#f59e0b';
+        barColor = '#f59e0b';
+      } else {
+        statusText = 'Crowded';
+        statusColor = '#e04b4b';
+        barColor = '#e04b4b';
+      }
+      
+      statusEl.textContent = statusText;
+      statusEl.style.color = statusColor;
+      barEl.style.width = percentage + '%';
+      barEl.style.background = barColor;
+    }
+  }
+});
+
+// Kitchen Attendance updates
+socket.on('occupancy_update', (data) => {
+  if (data.channel_id === channels.OccupancyMonitor) {
+    const liveCount = data.live_count || 0;
+    const maxToday = data.max_today || 0;
+    const avgToday = data.avg_today || 0;
+    
+    // Calculate percentage: 100% if >= 3 people, actual percentage if < 3
+    // Percentage is based on 3 as the threshold
+    let displayPercentage;
+    if (liveCount >= 3) {
+      displayPercentage = 100;
+    } else {
+      // Calculate percentage out of 3 when below threshold
+      displayPercentage = Math.round((liveCount / 3) * 100);
+    }
+    
+    // Update current attendance
+    const currentEl = document.getElementById('ov-occ-current');
+    if (currentEl) currentEl.textContent = liveCount;
+    
+    // Update attendance percentage
+    const percentEl = document.getElementById('ov-occ-percentage');
+    if (percentEl) percentEl.textContent = displayPercentage + '%';
+    
+    // Update max today
+    const maxEl = document.getElementById('ov-occ-max');
+    if (maxEl) maxEl.textContent = maxToday;
+    
+    // Update avg today
+    const avgEl = document.getElementById('ov-occ-avg');
+    if (avgEl) avgEl.textContent = avgToday;
+    
+    // Update status banner
+    const banner = document.getElementById('occupancy-status-banner');
+    if (banner && data.banner_text) {
+      banner.textContent = data.banner_text;
+      banner.style.display = 'block';
+      
+      // Set banner color based on status
+      if (data.status === 'OK') {
+        banner.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        banner.style.color = 'white';
+        banner.style.borderLeft = '5px solid #047857';
+      } else if (data.status === 'BELOW_REQUIREMENT') {
+        banner.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+        banner.style.color = 'white';
+        banner.style.borderLeft = '5px solid #b91c1c';
+      } else if (data.status === 'PAUSED') {
+        banner.style.background = 'linear-gradient(135deg, #10b981 0%, #3b82f6 100%)';
+        banner.style.color = 'white';
+        banner.style.borderLeft = '5px solid #047857';
+      } else {
+        banner.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+        banner.style.color = 'white';
+        banner.style.borderLeft = '5px solid #374151';
+      }
+    } else if (banner) {
+      banner.style.display = 'none';
+    }
+    
+    // Update progress bar
+    const barEl = document.getElementById('ov-occ-bar');
+    if (barEl) {
+      // Show minimum 8% width when below threshold so color is always visible
+      const barWidth = liveCount < 3 ? Math.max(displayPercentage, 8) : displayPercentage;
+      barEl.style.width = barWidth + '%';
+      barEl.style.minWidth = liveCount < 3 ? '8%' : '0%';
+      barEl.style.opacity = '1';
+      // Red indicator if less than 3 people, green if 3 or more
+      if (liveCount < 3) {
+        barEl.style.background = 'linear-gradient(90deg, #e04b4b, #f59e0b)';  // Red-Orange: Below required
+      } else {
+        barEl.style.background = 'linear-gradient(90deg, #26a44b, #3b82f6)';  // Green-Blue: Sufficient attendance
+      }
+    }
+  }
+});
+
+// Kitchen Compliance updates
+socket.on('kitchen_update', (data) => {
+  if (data.channel_id === channels.KitchenCompliance) {
+    const totalPeople = data.total_people || 0;
+    const capCompliant = data.cap_compliant || 0;
+    const apronCompliant = data.apron_compliant || 0;
+    const glovesCompliant = data.gloves_compliant || 0;
+    const uniformCompliant = data.uniform_compliant || 0;
+    
+    // Update Chef Cap status
+    const capEl = document.getElementById('ov-kitchen-cap');
+    if (capEl) {
+      if (totalPeople === 0) {
+        capEl.textContent = '✓ OK';
+        capEl.style.color = '#26a44b';
+      } else if (capCompliant === totalPeople) {
+        capEl.textContent = '✓ OK';
+        capEl.style.color = '#26a44b';
+      } else {
+        capEl.textContent = '⚠ Violation Detected';
+        capEl.style.color = '#e04b4b';
+      }
+    }
+    
+    // Update Apron status
+    const apronEl = document.getElementById('ov-kitchen-apron');
+    if (apronEl) {
+      if (totalPeople === 0) {
+        apronEl.textContent = '✓ OK';
+        apronEl.style.color = '#26a44b';
+      } else if (apronCompliant === totalPeople) {
+        apronEl.textContent = '✓ OK';
+        apronEl.style.color = '#26a44b';
+      } else {
+        apronEl.textContent = '⚠ Violation Detected';
+        apronEl.style.color = '#e04b4b';
+      }
+    }
+    
+    // Update Gloves status
+    const glovesEl = document.getElementById('ov-kitchen-gloves');
+    if (glovesEl) {
+      if (totalPeople === 0) {
+        glovesEl.textContent = '✓ OK';
+        glovesEl.style.color = '#26a44b';
+      } else if (glovesCompliant === totalPeople) {
+        glovesEl.textContent = '✓ OK';
+        glovesEl.style.color = '#26a44b';
+      } else {
+        glovesEl.textContent = '⚠ Violation Detected';
+        glovesEl.style.color = '#e04b4b';
+      }
+    }
+    
+    // Update Uniform status
+    const uniformEl = document.getElementById('ov-kitchen-uniform');
+    if (uniformEl) {
+      if (totalPeople === 0) {
+        uniformEl.textContent = '✓ OK';
+        uniformEl.style.color = '#26a44b';
+      } else if (uniformCompliant === totalPeople) {
+        uniformEl.textContent = '✓ OK';
+        uniformEl.style.color = '#26a44b';
+      } else {
+        uniformEl.textContent = '⚠ Violation Detected';
+        uniformEl.style.color = '#e04b4b';
+      }
+    }
+  }
+});
+
+document.querySelectorAll('.nav-link').forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchView(link.getAttribute('data-view'));
+  });
+});
+function filterKitchenViolations(violationType) {
+  currentViolationFilter = violationType;
+  switchView('kitchen-compliance');
+  loadHistory('kitchen-compliance', 1, violationType);
+  // Show clear filter button
+  const clearBtn = document.getElementById('clear-filter-btn');
+  if (clearBtn) clearBtn.style.display = 'block';
+}
+
+function clearKitchenFilter() {
+  currentViolationFilter = null;
+  loadHistory('kitchen-compliance', 1, null);
+  // Hide clear filter button
+  const clearBtn = document.getElementById('clear-filter-btn');
+  if (clearBtn) clearBtn.style.display = 'none';
+}
+
+function switchView(view) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+  const viewMap = {
+    'overview': { id: 'overview-section', title: 'Dashboard Overview', subtitle: 'Real-time monitoring' },
+    'people-counter': { id: 'people-counter-section', title: 'People Counter', subtitle: 'Footfall analytics' },
+    'queue-monitor': { id: 'queue-monitor-section', title: 'Queue Monitor', subtitle: 'Queue analytics' },
+    'kitchen-compliance': { id: 'kitchen-compliance-section', title: 'Kitchen Compliance', subtitle: 'Safety monitoring' },
+    'occupancy': { id: 'occupancy-section', title: 'Kitchen Attendance', subtitle: 'Attendance tracking' }
+  };
+  const config = viewMap[view];
+  if (config) {
+    document.getElementById(config.id).classList.add('active');
+    document.querySelector('[data-view="' + view + '"]').classList.add('active');
+    document.getElementById('page-title').textContent = config.title;
+    document.getElementById('page-subtitle').textContent = config.subtitle;
+    if (view !== 'overview') {
+      // Reset filter when switching views normally (not from filterKitchenViolations)
+      if (view !== 'kitchen-compliance') {
+        currentViolationFilter = null;
+        const clearBtn = document.getElementById('clear-filter-btn');
+        if (clearBtn) clearBtn.style.display = 'none';
+      }
+      loadHistory(view);
+    }
+    if (view === 'people-counter') loadReport();
+    if (view === 'people-counter') loadPeakAnalytics();
+  }
+}
+let currentViolationFilter = null;
+
+function loadHistory(view, page = 1, violationType = null) {
+  const histMap = {
+    'people-counter': { app: 'PeopleCounter', ch: channels.PeopleCounter, div: 'pc-history', pag: 'pc-pagination' },
+    'queue-monitor': { app: 'QueueMonitor', ch: channels.QueueMonitor, div: 'qm-history', pag: 'qm-pagination' },
+    'kitchen-compliance': { app: 'KitchenCompliance', ch: channels.KitchenCompliance, div: 'kc-history', pag: 'kc-pagination' },
+    'occupancy': { app: 'OccupancyMonitor', ch: channels.OccupancyMonitor, div: 'occ-history', pag: 'occ-pagination' }
+  };
+  const h = histMap[view];
+  if (!h) return;
+  
+  // Store current filter for pagination
+  if (violationType !== null) currentViolationFilter = violationType;
+  const filterParam = (currentViolationFilter && view === 'kitchen-compliance') ? '&violation_type=' + currentViolationFilter : '';
+  
+  fetch('/history/' + h.app + '?page=' + page + '&limit=12&channel_id=' + h.ch + filterParam)
+    .then(res => res.json())
+    .then(data => {
+      const histDiv = document.getElementById(h.div);
+      const pagDiv = document.getElementById(h.pag);
+      histDiv.innerHTML = '';
+      if (data.detections && data.detections.length > 0) {
+        data.detections.forEach(det => {
+          const item = document.createElement('div');
+          item.className = 'history-item';
+          item.onclick = () => openLightbox(det.media_url);
+          item.innerHTML = '<img src="' + det.media_url + '" loading="lazy"><div class="history-item-info"><p><strong>' + (det.message || 'Detection') + '</strong></p><p>' + det.timestamp + '</p></div>';
+          histDiv.appendChild(item);
+        });
+        const filterInfo = currentViolationFilter ? ' <span style="color:#3b82f6;font-size:11px">(Filtered: ' + currentViolationFilter + ')</span>' : '';
+        pagDiv.innerHTML = '<button ' + (page === 1 ? 'disabled' : '') + ' onclick="loadHistory(\'' + view + '\', ' + (page - 1) + ')">Prev</button><span style="color:#9aa0a6;padding:0 10px">Page ' + page + '/' + data.total_pages + filterInfo + '</span><button ' + (page === data.total_pages ? 'disabled' : '') + ' onclick="loadHistory(\'' + view + '\', ' + (page + 1) + ')">Next</button>';
+      } else {
+        histDiv.innerHTML = '<p style="color:#9aa0a6;padding:20px;text-align:center">No detections yet</p>';
+        pagDiv.innerHTML = '';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById(h.div).innerHTML = '<p style="color:#e04b4b;padding:20px;text-align:center">Error loading</p>';
+    });
+}
+let currentReportData = null;
+let currentReportDate = null;
+
+function loadReport() {
+  const date = document.getElementById('pc-date').value || new Date().toISOString().split('T')[0];
+  currentReportDate = date;
+  
+  fetch('/report/' + channels.PeopleCounter + '/' + date)
+    .then(res => res.json())
+    .then(data => {
+      currentReportData = data;
+      let html = '';
+      const downloadBtn = document.getElementById('download-report-btn');
+      
+      if (data.hourly_data) {
+        html = '<table><thead><tr><th>Time Period</th><th>IN</th><th>OUT</th></tr></thead><tbody>';
+        let totalIn = 0, totalOut = 0;
+        let hasData = false;
+        
+        for (let h = 0; h < 24; h++) {
+          const hourData = data.hourly_data[h] || { in: 0, out: 0, total: 0 };
+          if (hourData.total > 0) {
+            hasData = true;
+            const hourStart = String(h).padStart(2, '0') + ':00';
+            const hourEnd = String(h).padStart(2, '0') + ':59';
+            const timePeriod = hourStart + '-' + hourEnd;
+            html += '<tr><td>' + timePeriod + '</td><td>' + hourData.in + '</td><td>' + hourData.out + '</td></tr>';
+            totalIn += hourData.in;
+            totalOut += hourData.out;
+          }
+        }
+        html += '</tbody></table>';
+        
+        // Show download button only if there's data
+        if (downloadBtn) {
+          downloadBtn.style.display = hasData ? 'block' : 'none';
+        }
+      } else if (data.error) {
+        html = '<p style="color:#9aa0a6;padding:20px;text-align:center">' + data.error + '</p>';
+        if (downloadBtn) downloadBtn.style.display = 'none';
+      } else {
+        html = '<p style="color:#9aa0a6;padding:20px;text-align:center">No data available for this date</p>';
+        if (downloadBtn) downloadBtn.style.display = 'none';
+      }
+      document.getElementById('pc-report').innerHTML = html;
+    })
+    .catch(err => {
+      console.error(err);
+      document.getElementById('pc-report').innerHTML = '<p style="color:#e04b4b;padding:20px;text-align:center">Error loading report</p>';
+      const downloadBtn = document.getElementById('download-report-btn');
+      if (downloadBtn) downloadBtn.style.display = 'none';
+    });
+}
+
+function downloadReport() {
+  if (!currentReportData || !currentReportData.hourly_data) {
+    alert('No data to download');
+    return;
+  }
+  
+  // Create CSV content
+  let csv = 'Time Period,IN,OUT\n';
+  
+  for (let h = 0; h < 24; h++) {
+    const hourData = currentReportData.hourly_data[h] || { in: 0, out: 0, total: 0 };
+    if (hourData.total > 0) {
+      const hourStart = String(h).padStart(2, '0') + ':00';
+      const hourEnd = String(h).padStart(2, '0') + ':59';
+      const timePeriod = hourStart + '-' + hourEnd;
+      csv += `${timePeriod},${hourData.in},${hourData.out}\n`;
+    }
+  }
+  
+  // Create blob and download
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `people_counter_report_${currentReportDate}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Schedule Management Functions
+function downloadTemplate() {
+  window.location.href = '/api/occupancy/schedule/template';
+}
+
+function promptScheduleUpload() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.xlsx,.xls';
+  input.onchange = () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!['.csv', '.xlsx', '.xls'].includes(ext)) {
+      alert('Please select a CSV or Excel file (.csv, .xlsx, .xls)');
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Show loading message
+    const scheduleGrid = document.getElementById('schedule-grid');
+    if (scheduleGrid) {
+      scheduleGrid.innerHTML = '<p style="color:#9aa0a6;padding:20px;text-align:center">Uploading schedule...</p>';
+    }
+    
+    fetch(`/api/occupancy/schedule/upload/${channels.OccupancyMonitor}`, {
+      method: 'POST',
+      body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        alert(`✅ ${data.message}`);
+        openScheduleModal();
+      } else {
+        alert(`❌ Error uploading schedule: ${data.error}`);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert('❌ Error uploading schedule. Please try again.');
+    });
+  };
+  input.click();
+}
+
+function openScheduleModal() {
+  const modal = document.getElementById('schedule-modal');
+  modal.style.display = 'block';
+  loadSchedule();
+}
+
+function closeScheduleModal() {
+  const modal = document.getElementById('schedule-modal');
+  modal.style.display = 'none';
+}
+
+function loadSchedule() {
+  const scheduleGrid = document.getElementById('schedule-grid');
+  scheduleGrid.innerHTML = '<p style="color:#9aa0a6;padding:20px;text-align:center">Loading schedule...</p>';
+  
+  fetch(`/api/occupancy/schedule/${channels.OccupancyMonitor}`)
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      displaySchedule(data);
+    })
+    .catch(error => {
+      console.error('Error loading schedule:', error);
+      scheduleGrid.innerHTML = '<p style="color:#e04b4b;padding:20px;text-align:center">Error loading schedule. Please try importing a schedule file first.</p>';
+    });
+}
+
+function displaySchedule(schedule) {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+  
+  let html = '<table style="width: 100%; border-collapse: collapse; background: #121314; color: #fff;">';
+  html += '<thead><tr style="background: #1a1d21;"><th style="padding: 10px; border: 1px solid #2a2d31; position: sticky; left: 0; background: #1a1d21; z-index: 2;">Day</th>';
+  
+  hours.forEach(hour => {
+    html += `<th style="padding: 10px; border: 1px solid #2a2d31; font-size: 12px;">${hour}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  
+  days.forEach(day => {
+    html += '<tr>';
+    html += `<td style="padding: 10px; border: 1px solid #2a2d31; font-weight: 600; position: sticky; left: 0; background: #1a1d21; z-index: 1;">${day}</td>`;
+    hours.forEach(hour => {
+      const value = schedule[hour] && schedule[hour][day] ? schedule[hour][day] : '';
+      html += `<td style="padding: 5px; border: 1px solid #2a2d31;">
+        <input type="number" min="0" max="100" value="${value}" 
+        id="schedule-${day}-${hour}" placeholder="0" 
+        style="width: 60px; padding: 5px; background: #0d0f10; color: #fff; border: 1px solid #2a2d31; border-radius: 4px; text-align: center;">
+      </td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  
+  document.getElementById('schedule-grid').innerHTML = html;
+}
+
+function saveSchedule() {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+  
+  const schedule = {};
+  hours.forEach(hour => {
+    schedule[hour] = {};
+    days.forEach(day => {
+      const input = document.getElementById(`schedule-${day}-${hour}`);
+      if (input) {
+        const value = parseInt(input.value) || 0;
+        if (value > 0) {
+          schedule[hour][day] = value;
+        }
+      }
+    });
+  });
+
+  fetch(`/api/occupancy/schedule/${channels.OccupancyMonitor}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(schedule)
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      alert('✅ Schedule saved successfully!');
+      closeScheduleModal();
+    } else {
+      alert('❌ Error saving schedule: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert('❌ Error saving schedule. Please try again.');
+  });
+}
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('show');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('show');
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('pc-date').valueAsDate = new Date();
+  // Load peak analytics on page load
+  loadPeakAnalytics();
+  
+  // Refresh peak analytics every 5 minutes
+  setInterval(loadPeakAnalytics, 5 * 60 * 1000);
+});
+</script>
+</body>
+</html>
