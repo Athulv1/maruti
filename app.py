@@ -14,6 +14,8 @@ from pathlib import Path
 from inference import MobileOutDetector, CentroidTracker
 import numpy as np
 import pygame
+import face_recognition
+import pickle
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -25,10 +27,45 @@ app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs('violations', exist_ok=True)
+os.makedirs('face_detections', exist_ok=True)
 
 # Initialize pygame mixer for audio alerts
 pygame.mixer.init()
 ALERT_SOUND_PATH = '/home/athul/maruthi/violation_alert.wav'
+
+# Load known faces
+known_face_encodings = []
+known_face_names = []
+KNOWN_FACES_DIR = 'known_faces'
+
+def load_known_faces():
+    """Load known faces from the known_faces directory"""
+    global known_face_encodings, known_face_names
+    
+    if not os.path.exists(KNOWN_FACES_DIR):
+        print(f"⚠️ Known faces directory not found: {KNOWN_FACES_DIR}")
+        return
+    
+    for filename in os.listdir(KNOWN_FACES_DIR):
+        if filename.endswith(('.jpg', '.jpeg', '.png')):
+            filepath = os.path.join(KNOWN_FACES_DIR, filename)
+            try:
+                image = face_recognition.load_image_file(filepath)
+                encodings = face_recognition.face_encodings(image)
+                
+                if encodings:
+                    known_face_encodings.append(encodings[0])
+                    # Extract name from filename (remove extension and replace underscores)
+                    name = os.path.splitext(filename)[0].replace('_', ' ')
+                    known_face_names.append(name)
+                    print(f"✓ Loaded face: {name}")
+            except Exception as e:
+                print(f"✗ Error loading {filename}: {e}")
+    
+    print(f"✓ Total known faces loaded: {len(known_face_names)}")
+
+# Load known faces on startup
+load_known_faces()
 
 # Global variables for live streaming
 current_frame = None
@@ -42,6 +79,7 @@ processing_stats = {
     'status': 'idle'
 }
 violations_list = []  # Store mobile violation screenshots
+face_detections_list = []  # Store face detection screenshots
 frame_lock = threading.Lock()
 
 
@@ -192,6 +230,67 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                         print(f"📸 Screenshot saved: {violation_filename}")
                     except Exception as e:
                         print(f"Error playing alert sound: {e}")
+            
+            # Face Detection (process every 5th frame for performance)
+            if frame_count % 5 == 0:
+                try:
+                    # Resize frame for faster face detection
+                    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+                    rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Find all face locations and encodings
+                    face_locations = face_recognition.face_locations(rgb_small_frame)
+                    face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+                    
+                    for face_encoding, face_location in zip(face_encodings, face_locations):
+                        # Compare with known faces
+                        matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=0.6)
+                        name = "Unknown"
+                        
+                        if True in matches:
+                            # Find best match
+                            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+                            best_match_index = np.argmin(face_distances)
+                            if matches[best_match_index]:
+                                name = known_face_names[best_match_index]
+                        
+                        # Scale back face location
+                        top, right, bottom, left = face_location
+                        top *= 4
+                        right *= 4
+                        bottom *= 4
+                        left *= 4
+                        
+                        # Draw rectangle and name on frame
+                        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+                        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
+                        cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+                        
+                        # Save face detection screenshot (one per person per session)
+                        if name != "Unknown":
+                            global face_detections_list
+                            # Check if this person already detected in this session
+                            already_detected = any(d['name'] == name for d in face_detections_list)
+                            
+                            if not already_detected:
+                                timestamp = time.strftime('%Y%m%d_%H%M%S')
+                                face_filename = f'face_{name.replace(" ", "_")}_{timestamp}.jpg'
+                                face_path = os.path.join('face_detections', face_filename)
+                                cv2.imwrite(face_path, frame)
+                                
+                                face_detections_list.append({
+                                    'name': name,
+                                    'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                                    'frame_number': frame_count,
+                                    'filename': face_filename,
+                                    'path': face_path
+                                })
+                                
+                                print(f"👤 Face detected: {name} at frame {frame_count}")
+                                print(f"📸 Face screenshot saved: {face_filename}")
+                
+                except Exception as e:
+                    print(f"Face detection error: {e}")
             
             # Update tracker
             objects = tracker.update(detections_for_tracking)
@@ -421,6 +520,21 @@ def get_violations():
 def get_violation_image(filename):
     """Serve violation screenshot"""
     return send_from_directory('violations', filename)
+
+
+@app.route('/face_detections')
+def get_face_detections():
+    """Get list of face detections"""
+    return jsonify({
+        'detections': face_detections_list,
+        'total': len(face_detections_list)
+    })
+
+
+@app.route('/face_detections/<filename>')
+def get_face_detection_image(filename):
+    """Serve face detection screenshot"""
+    return send_from_directory('face_detections', filename)
 
 
 if __name__ == '__main__':
