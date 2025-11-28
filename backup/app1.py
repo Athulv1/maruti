@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 from inference import MobileOutDetector, CentroidTracker
 import numpy as np
-import pygame
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -24,11 +23,6 @@ app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}
 # Create folders if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
-os.makedirs('violations', exist_ok=True)
-
-# Initialize pygame mixer for audio alerts
-pygame.mixer.init()
-ALERT_SOUND_PATH = '/home/athul/maruthi/violation_alert.wav'
 
 # Global variables for live streaming
 current_frame = None
@@ -41,7 +35,6 @@ processing_stats = {
     'fps': 0,
     'status': 'idle'
 }
-violations_list = []  # Store mobile violation screenshots
 frame_lock = threading.Lock()
 
 
@@ -56,11 +49,6 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
     
     processing_active = True
     processing_stats['status'] = 'processing'
-    last_alert_time = 0  # Track last alert time locally
-    mobile_detection_frames = 0  # Track consecutive mobile detections
-    MOBILE_FRAME_THRESHOLD = 2  # Minimum frames needed to trigger alert
-    mobile_detection_frames = 0  # Track consecutive mobile detections
-    MOBILE_FRAME_THRESHOLD = 2  # Minimum frames needed to trigger alert
     
     try:
         # Initialize detector
@@ -143,55 +131,15 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                 verbose=False
             )[0]
             
-            # Collect detections for tracking and check for mobile violations
+            # Collect detections for tracking
             detections_for_tracking = []
-            mobile_detected_this_frame = False
-            
             for box in results.boxes:
                 class_id = int(box.cls[0])
                 class_name = detector.class_names[class_id]
                 
-                if class_name == 'MOBILE':
-                    mobile_detected_this_frame = True
-                elif class_name == 'OUT':
+                if class_name == 'OUT':
                     bbox = box.xyxy[0].cpu().numpy()
                     detections_for_tracking.append(bbox)
-            
-            # Track mobile detections across frames
-            if mobile_detected_this_frame:
-                mobile_detection_frames += 1
-            else:
-                mobile_detection_frames = 0  # Reset counter if no mobile in current frame
-            
-            # Play alert sound only if mobile detected in 3+ consecutive frames (with cooldown)
-            if mobile_detection_frames >= MOBILE_FRAME_THRESHOLD:
-                current_time = time.time()
-                if current_time - last_alert_time >= 5:  # 5 second cooldown
-                    try:
-                        # Play audio alert
-                        pygame.mixer.music.load(ALERT_SOUND_PATH)
-                        pygame.mixer.music.play()
-                        last_alert_time = current_time
-                        
-                        # Capture screenshot
-                        timestamp = time.strftime('%Y%m%d_%H%M%S')
-                        violation_filename = f'mobile_violation_{timestamp}.jpg'
-                        violation_path = os.path.join('violations', violation_filename)
-                        cv2.imwrite(violation_path, frame)
-                        
-                        # Add to violations list
-                        global violations_list
-                        violations_list.append({
-                            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-                            'frame_number': frame_count,
-                            'filename': violation_filename,
-                            'path': violation_path
-                        })
-                        
-                        print(f"🔊 Mobile violation alert triggered (detected in {mobile_detection_frames} consecutive frames)")
-                        print(f"📸 Screenshot saved: {violation_filename}")
-                    except Exception as e:
-                        print(f"Error playing alert sound: {e}")
             
             # Update tracker
             objects = tracker.update(detections_for_tracking)
@@ -369,7 +317,7 @@ def upload_video():
     # Start processing in background thread
     thread = threading.Thread(
         target=process_video_live,
-        args=(video_path, 'bestmaruthi.pt', roi_config, conf_threshold)
+        args=(video_path, 'weights/best.pt', roi_config, conf_threshold)
     )
     thread.daemon = True
     thread.start()
@@ -406,21 +354,6 @@ def stop_processing():
 def download_file(filename):
     """Download processed video"""
     return send_from_directory(app.config['OUTPUT_FOLDER'], filename, as_attachment=True)
-
-
-@app.route('/violations')
-def get_violations():
-    """Get list of mobile violations"""
-    return jsonify({
-        'violations': violations_list,
-        'total': len(violations_list)
-    })
-
-
-@app.route('/violations/<filename>')
-def get_violation_image(filename):
-    """Serve violation screenshot"""
-    return send_from_directory('violations', filename)
 
 
 if __name__ == '__main__':

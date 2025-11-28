@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROI Editor - Draw IN/OUT Boxes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .instructions {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+        }
+
+        .instructions h3 {
+            color: #1e40af;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+            color: #374151;
+        }
+
+        .instructions li {
+            margin: 8px 0;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            border: 3px solid #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        #canvas {
+            display: block;
+            cursor: crosshair;
+            max-width: 100%;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .mode-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-btn.in-mode {
+            background: #10b981;
+            color: white;
+        }
+
+        .mode-btn.out-mode {
+            background: #ef4444;
+            color: white;
+        }
+
+        .mode-btn:not(.active) {
+            background: white;
+            color: #6b7280;
+            border: 2px solid #d1d5db;
+        }
+
+        .mode-btn.active {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .action-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .clear-btn {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .save-btn {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .back-btn {
+            background: #6b7280;
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .box-info {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 10px;
+        }
+
+        .box-info-item {
+            flex: 1;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .box-info-item.in {
+            background: rgba(16, 185, 129, 0.1);
+            border: 2px solid #10b981;
+        }
+
+        .box-info-item.out {
+            background: rgba(239, 68, 68, 0.1);
+            border: 2px solid #ef4444;
+        }
+
+        .box-info-item h4 {
+            margin-bottom: 10px;
+        }
+
+        .box-info-item.in h4 {
+            color: #059669;
+        }
+
+        .box-info-item.out h4 {
+            color: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 ROI Editor - Draw IN & OUT Boxes</h1>
+
+        <div class="instructions">
+            <h3>📝 Instructions:</h3>
+            <ul>
+                <li><strong>Step 1:</strong> Make sure you have uploaded a video in the Out Count section first</li>
+                <li><strong>Step 2:</strong> Select either <strong>IN Box</strong> or <strong>OUT Box</strong> mode</li>
+                <li><strong>Step 3:</strong> Click on the video frame to mark 4 corner points of your box</li>
+                <li>The box will automatically close after 4 points</li>
+                <li>Use <strong>Clear Current</strong> to redraw the current box</li>
+                <li>Click <strong>Save ROI</strong> when both boxes are complete</li>
+                <li>People detected in IN box then OUT box will increment the OUT count</li>
+            </ul>
+        </div>
+
+        <div id="no-video-warning" class="instructions" style="display: none; background: #fef3c7; border-left-color: #f59e0b;">
+            <h3>⚠️ No Video Source Available</h3>
+            <p>Please go back to the dashboard and upload a video in the "Out Count" section first, then return here to draw ROI boxes.</p>
+            <button class="action-btn back-btn" onclick="goBack()" style="margin-top: 10px;">
+                ← Go to Dashboard
+            </button>
+        </div>
+
+        <div class="controls">
+            <div class="mode-selector">
+                <button class="mode-btn in-mode active" id="inModeBtn" onclick="setMode('in')">
+                    📥 IN Box (Green)
+                </button>
+                <button class="mode-btn out-mode" id="outModeBtn" onclick="setMode('out')">
+                    📤 OUT Box (Red)
+                </button>
+            </div>
+            
+            <button class="action-btn clear-btn" onclick="clearCurrentBox()">
+                🗑️ Clear Current
+            </button>
+            
+            <button class="action-btn save-btn" onclick="saveROI()">
+                💾 Save ROI
+            </button>
+            
+            <button class="action-btn back-btn" onclick="goBack()">
+                ← Back to Dashboard
+            </button>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="box-info">
+            <div class="box-info-item in">
+                <h4>IN Box Status</h4>
+                <p id="inBoxStatus">Not drawn yet - Click 4 points to create</p>
+            </div>
+            <div class="box-info-item out">
+                <h4>OUT Box Status</h4>
+                <p id="outBoxStatus">Not drawn yet - Click 4 points to create</p>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let currentMode = 'in'; // 'in' or 'out'
+        let inBoxPoints = [];
+        let outBoxPoints = [];
+        let backgroundImage = new Image();
+
+        // Load video frame as background
+        async function loadVideoFrame() {
+            try {
+                const response = await fetch('/api/out-count/roi-frame');
+                if (!response.ok) {
+                    throw new Error('No video available');
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                backgroundImage.onload = function() {
+                    canvas.width = backgroundImage.width;
+                    canvas.height = backgroundImage.height;
+                    redraw();
+                    loadSavedROI();
+                    document.getElementById('no-video-warning').style.display = 'none';
+                    document.querySelector('.canvas-container').style.display = 'inline-block';
+                };
+                backgroundImage.src = url;
+            } catch (error) {
+                document.getElementById('no-video-warning').style.display = 'block';
+                document.querySelector('.canvas-container').style.display = 'none';
+                document.querySelector('.controls').style.display = 'none';
+                document.querySelector('.box-info').style.display = 'none';
+            }
+        }
+
+        // Load saved ROI if exists
+        async function loadSavedROI() {
+            try {
+                const response = await fetch('/api/out-count/get-roi');
+                const data = await response.json();
+                if (data.in_box) {
+                    inBoxPoints = data.in_box;
+                    updateStatus('in');
+                }
+                if (data.out_box) {
+                    outBoxPoints = data.out_box;
+                    updateStatus('out');
+                }
+                redraw();
+            } catch (error) {
+                console.log('No saved ROI found');
+            }
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('inModeBtn').classList.toggle('active', mode === 'in');
+            document.getElementById('outModeBtn').classList.toggle('active', mode === 'out');
+        }
+
+        function clearCurrentBox() {
+            if (currentMode === 'in') {
+                inBoxPoints = [];
+                updateStatus('in');
+            } else {
+                outBoxPoints = [];
+                updateStatus('out');
+            }
+            redraw();
+        }
+
+        canvas.addEventListener('click', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            if (currentMode === 'in') {
+                if (inBoxPoints.length < 4) {
+                    inBoxPoints.push([Math.round(x), Math.round(y)]);
+                    updateStatus('in');
+                    redraw();
+                }
+            } else {
+                if (outBoxPoints.length < 4) {
+                    outBoxPoints.push([Math.round(x), Math.round(y)]);
+                    updateStatus('out');
+                    redraw();
+                }
+            }
+        });
+
+        function redraw() {
+            // Draw background image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(backgroundImage, 0, 0);
+
+            // Draw IN box (green)
+            if (inBoxPoints.length > 0) {
+                ctx.strokeStyle = '#10b981';
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
+                ctx.lineWidth = 3;
+                
+                ctx.beginPath();
+                ctx.moveTo(inBoxPoints[0][0], inBoxPoints[0][1]);
+                for (let i = 1; i < inBoxPoints.length; i++) {
+                    ctx.lineTo(inBoxPoints[i][0], inBoxPoints[i][1]);
+                }
+                if (inBoxPoints.length === 4) {
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                ctx.stroke();
+
+                // Draw points
+                inBoxPoints.forEach((point, i) => {
+                    ctx.fillStyle = '#10b981';
+                    ctx.beginPath();
+                    ctx.arc(point[0], point[1], 6, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.fillText((i + 1).toString(), point[0] - 3, point[1] + 4);
+                });
+            }
+
+            // Draw OUT box (red)
+            if (outBoxPoints.length > 0) {
+                ctx.strokeStyle = '#ef4444';
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+                ctx.lineWidth = 3;
+                
+                ctx.beginPath();
+                ctx.moveTo(outBoxPoints[0][0], outBoxPoints[0][1]);
+                for (let i = 1; i < outBoxPoints.length; i++) {
+                    ctx.lineTo(outBoxPoints[i][0], outBoxPoints[i][1]);
+                }
+                if (outBoxPoints.length === 4) {
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                ctx.stroke();
+
+                // Draw points
+                outBoxPoints.forEach((point, i) => {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(point[0], point[1], 6, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.fillText((i + 1).toString(), point[0] - 3, point[1] + 4);
+                });
+            }
+        }
+
+        function updateStatus(box) {
+            const points = box === 'in' ? inBoxPoints : outBoxPoints;
+            const statusEl = document.getElementById(box + 'BoxStatus');
+            
+            if (points.length === 0) {
+                statusEl.textContent = 'Not drawn yet - Click 4 points to create';
+            } else if (points.length < 4) {
+                statusEl.textContent = `${points.length}/4 points marked - Click ${4 - points.length} more`;
+            } else {
+                statusEl.textContent = '✓ Complete - 4 points marked';
+            }
+        }
+
+        async function saveROI() {
+            if (inBoxPoints.length !== 4 || outBoxPoints.length !== 4) {
+                showStatus('Please complete both IN and OUT boxes (4 points each)', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/out-count/save-roi', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        in_box: inBoxPoints,
+                        out_box: outBoxPoints,
+                        frame_width: canvas.width,
+                        frame_height: canvas.height
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showStatus('✓ ROI boxes saved successfully! You can now go back to dashboard.', 'success');
+                } else {
+                    showStatus('Failed to save ROI boxes', 'error');
+                }
+            } catch (error) {
+                showStatus('Error saving ROI: ' + error.message, 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = 'status ' + type;
+            statusEl.style.display = 'block';
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
+        }
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Load frame on page load
+        loadVideoFrame();
+    </script>
+</body>
+</html>

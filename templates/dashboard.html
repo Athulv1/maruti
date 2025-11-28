@@ -65,7 +65,7 @@
     .sub { color: #9aa0a6; font-size: 13px; margin-top: 5px; }
     .section { display: none; }
     .section.active { display: block; }
-    .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 10px 6px; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 10px 6px; }
     .card { 
       background: linear-gradient(135deg, rgba(23, 24, 26, 0.95) 0%, rgba(31, 33, 37, 0.95) 100%);
       backdrop-filter: blur(10px);
@@ -292,6 +292,51 @@
       pointer-events: none;
     }
     
+    /* Range slider styles */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: linear-gradient(90deg, #26a44b 0%, #f59e0b 50%, #e04b4b 100%);
+      border-radius: 5px;
+      outline: none;
+      cursor: pointer;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border: 3px solid #3b82f6;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
+      transition: all 0.2s;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.7);
+    }
+    
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border: 3px solid #3b82f6;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.5);
+      transition: all 0.2s;
+    }
+    
+    input[type="range"]::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.7);
+    }
+    
     /* Upload button styles */
     .upload-btn {
       background: linear-gradient(135deg, #3b82f6, #2563eb, #1d4ed8);
@@ -373,6 +418,9 @@
         <a href="#" data-view="violation-detection" class="nav-link">
           <div class="icon">📱</div><div>Violation Detection</div>
         </a>
+        <a href="#" data-view="out-count" class="nav-link">
+          <div class="icon">🚪</div><div>Out Count</div>
+        </a>
       </nav>
     </aside>
     
@@ -403,6 +451,16 @@
             <div style="margin-top: 20px;">
               <div class="big" style="color: #e04b4b;" id="ov-violations">0</div>
               <div style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">Total Violations</div>
+            </div>
+            <div style="margin-top: 20px; color: #3b82f6; font-size: 14px;">Click to open →</div>
+          </div>
+          
+          <div class="card" onclick="switchView('out-count')">
+            <h3>🚪 Out Count Detection</h3>
+            <p>Track people entering and exiting monitored areas</p>
+            <div style="margin-top: 20px;">
+              <div class="big" style="color: #f59e0b;" id="ov-out-count">0</div>
+              <div style="color: #9aa0a6; font-size: 13px; margin-top: 5px;">People Exited</div>
             </div>
             <div style="margin-top: 20px; color: #3b82f6; font-size: 14px;">Click to open →</div>
           </div>
@@ -470,7 +528,7 @@
               </select>
               <label class="upload-btn">
                 📤 Upload Video
-                <input type="file" id="face-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv" onchange="uploadVideo('face')">
+                <input type="file" id="face-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv,.mts,.m2ts,.ts,.webm,.3gp,.mpg,.mpeg" onchange="uploadVideo('face')">
               </label>
             </div>
             <div id="face-upload-progress" class="upload-progress">
@@ -541,7 +599,7 @@
               </select>
               <label class="upload-btn">
                 📤 Upload Video
-                <input type="file" id="violation-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv" onchange="uploadVideo('violation')">
+                <input type="file" id="violation-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv,.mts,.m2ts,.ts,.webm,.3gp,.mpg,.mpeg" onchange="uploadVideo('violation')">
               </label>
             </div>
             <div id="violation-upload-progress" class="upload-progress">
@@ -577,6 +635,88 @@
           <h3>📊 Detection Statistics</h3>
           <div class="stats-value" id="violation-count">0</div>
           <div style="text-align: center; color: #9aa0a6; font-size: 14px;">Total Violations Detected</div>
+        </div>
+      </div>
+      
+      <!-- Out Count Section -->
+      <div id="out-count-section" class="section">
+        <div class="controls-section">
+          <h3>🚪 Out Count Detection Settings</h3>
+          
+          <div class="control-group">
+            <label>Source Type:</label>
+            <div class="radio-group">
+              <label><input type="radio" name="out-source" value="video" checked onchange="toggleOutSource()"> Video File</label>
+              <label><input type="radio" name="out-source" value="webcam" onchange="toggleOutSource()"> Webcam</label>
+            </div>
+          </div>
+          
+          <div id="out-video-group" class="control-group">
+            <label>Select Video:</label>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <select id="out-video-select" style="flex: 1; max-width: 400px;">
+                <option value="">Loading videos...</option>
+              </select>
+              <label class="upload-btn">
+                📤 Upload Video
+                <input type="file" id="out-upload-input" accept=".mp4,.avi,.mov,.mkv,.wmv,.flv,.mts,.m2ts,.ts,.webm,.3gp,.mpg,.mpeg" onchange="uploadVideo('out')">
+              </label>
+            </div>
+            <div id="out-upload-progress" class="upload-progress">
+              <div style="font-size: 13px; color: #3b82f6;">Uploading...</div>
+              <div class="upload-progress-bar"><div id="out-upload-bar" class="upload-progress-fill"></div></div>
+            </div>
+            <div id="out-upload-success" class="upload-success">✓ Video uploaded successfully!</div>
+            <div id="out-upload-error" class="upload-error">✗ Upload failed. Please try again.</div>
+          </div>
+          
+          <div id="out-webcam-group" class="control-group" style="display: none;">
+            <label>Camera Index:</label>
+            <input type="number" id="out-webcam-index" value="0" min="0" max="5" style="max-width: 150px;">
+          </div>
+          
+          <div class="control-group">
+            <label>Counting Line Position (Vertical): <span id="line-position-value">40</span>% from left</label>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <input type="range" id="line-position-slider" min="30" max="90" value="40" 
+                     style="flex: 1; max-width: 400px;" 
+                     oninput="document.getElementById('line-position-value').textContent = this.value">
+              <div style="font-size: 12px; color: #9aa0a6;">
+                <div>Left to Right = OUT →</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="control-group">
+            <button class="btn" onclick="window.open('/roi-editor', '_blank')" style="background: linear-gradient(135deg, #667eea, #764ba2); margin-bottom: 15px;">
+              🎯 Draw IN/OUT Boxes (ROI Editor)
+            </button>
+          </div>
+          
+          <div class="control-group">
+            <button id="out-start-btn" class="btn" onclick="startOutCount()">▶ START DETECTION</button>
+            <button id="out-stop-btn" class="btn btn-stop" onclick="stopOutCount()" style="display: none; margin-left: 10px;">⏹ STOP</button>
+            <span id="out-status" class="status-badge status-inactive" style="margin-left: 15px;">Inactive</span>
+          </div>
+        </div>
+        
+        <div class="video-container">
+          <div class="video-box">
+            <div class="video-feed" id="out-video-feed">
+              <div class="video-placeholder">📹 Video feed will appear here</div>
+            </div>
+            <div class="video-meta"><strong>Out Count Detection Feed</strong></div>
+          </div>
+        </div>
+        
+        <div class="stats-card">
+          <h3>📊 Count Statistics</h3>
+          <div style="display: flex; justify-content: center; margin: 20px 0;">
+            <div style="text-align: center;">
+              <div class="stats-value" style="color: #e04b4b; font-size: 48px;" id="out-count">0</div>
+              <div style="text-align: center; color: #9aa0a6; font-size: 16px; font-weight: 600;">People OUT</div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -626,7 +766,8 @@
       const viewMap = {
         'overview': { id: 'overview-section', title: 'Dashboard Overview', subtitle: 'Real-time monitoring system' },
         'face-detection': { id: 'face-detection-section', title: 'Face Detection', subtitle: 'Recognition and identification' },
-        'violation-detection': { id: 'violation-detection-section', title: 'Violation Detection', subtitle: 'Mobile phone detection system' }
+        'violation-detection': { id: 'violation-detection-section', title: 'Violation Detection', subtitle: 'Mobile phone detection system' },
+        'out-count': { id: 'out-count-section', title: 'Out Count Detection', subtitle: 'People counting and tracking' }
       };
       
       const config = viewMap[view];
@@ -654,17 +795,21 @@
         .then(data => {
           const faceSelect = document.getElementById('face-video-select');
           const violationSelect = document.getElementById('violation-video-select');
+          const outSelect = document.getElementById('out-video-select');
           
           faceSelect.innerHTML = '';
           violationSelect.innerHTML = '';
+          outSelect.innerHTML = '';
           
           if (data.videos.length === 0) {
             faceSelect.innerHTML = '<option value="">No videos found</option>';
             violationSelect.innerHTML = '<option value="">No videos found</option>';
+            outSelect.innerHTML = '<option value="">No videos found</option>';
           } else {
             data.videos.forEach(v => {
               faceSelect.innerHTML += `<option value="${v}">${v}</option>`;
               violationSelect.innerHTML += `<option value="${v}">${v}</option>`;
+              outSelect.innerHTML += `<option value="${v}">${v}</option>`;
             });
           }
         })
@@ -893,6 +1038,91 @@
         .then(data => {
           document.getElementById('violation-count').textContent = data.violation_count;
           document.getElementById('ov-violations').textContent = data.violation_count;
+        })
+        .catch(err => console.error('Stats error:', err));
+    }
+    
+    // Out Count Detection Functions
+    function toggleOutSource() {
+      const source = document.querySelector('input[name="out-source"]:checked').value;
+      document.getElementById('out-video-group').style.display = source === 'video' ? 'block' : 'none';
+      document.getElementById('out-webcam-group').style.display = source === 'webcam' ? 'block' : 'none';
+    }
+    
+    function startOutCount() {
+      const sourceType = document.querySelector('input[name="out-source"]:checked').value;
+      const source = sourceType === 'video' 
+        ? document.getElementById('out-video-select').value
+        : document.getElementById('out-webcam-index').value;
+      const linePosition = document.getElementById('line-position-slider').value;
+      
+      if (!source) {
+        alert('Please select a source');
+        return;
+      }
+      
+      const btn = document.getElementById('out-start-btn');
+      btn.innerHTML = '▶ STARTING<span class="spinner"></span>';
+      btn.disabled = true;
+      
+      fetch('/api/out-count/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          source_type: sourceType, 
+          source: source,
+          line_position: linePosition
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          document.getElementById('out-video-feed').innerHTML = '<img src="/video_feed/out_count" alt="Out Count Feed">';
+          btn.style.display = 'none';
+          btn.innerHTML = '▶ START DETECTION';
+          btn.disabled = false;
+          document.getElementById('out-stop-btn').style.display = 'inline-block';
+          document.getElementById('out-status').textContent = 'Active';
+          document.getElementById('out-status').className = 'status-badge status-active';
+          
+          outCountStatsInterval = setInterval(updateOutCountStats, 1000);
+        } else {
+          alert('Error: ' + data.error);
+          btn.innerHTML = '▶ START DETECTION';
+          btn.disabled = false;
+        }
+      })
+      .catch(err => {
+        alert('Error starting detection: ' + err);
+        btn.innerHTML = '▶ START DETECTION';
+        btn.disabled = false;
+      });
+    }
+    
+    function stopOutCount() {
+      fetch('/api/out-count/stop', {method: 'POST'})
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('out-video-feed').innerHTML = '<div class="video-placeholder">📹 Video feed will appear here</div>';
+        document.getElementById('out-start-btn').style.display = 'inline-block';
+        document.getElementById('out-stop-btn').style.display = 'none';
+        document.getElementById('out-status').textContent = 'Inactive';
+        document.getElementById('out-status').className = 'status-badge status-inactive';
+        
+        if (outCountStatsInterval) {
+          clearInterval(outCountStatsInterval);
+        }
+      });
+    }
+    
+    let outCountStatsInterval = null;
+    
+    function updateOutCountStats() {
+      fetch('/api/out-count/stats')
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('out-count').textContent = data.out_count;
+          document.getElementById('ov-out-count').textContent = data.out_count;
         })
         .catch(err => console.error('Stats error:', err));
     }
