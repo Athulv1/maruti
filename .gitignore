@@ -48,6 +48,16 @@ videos/*.wmv
 known_faces/*.jpg
 known_faces/*.jpeg
 known_faces/*.png
+
+# Uploads and outputs - generated files
+uploads/
+outputs/
+violations/
+
+# Model weights - large files
+*.pt
+!yolov8n.pt
+!best.pt
 known_faces/*.bmp
 
 # Keep the README files
