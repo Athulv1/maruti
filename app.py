@@ -166,6 +166,14 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
         frame_count = 0
         start_time = time.time()
         
+        # Mobile violation tracking
+        mobile_detection_frames = 0
+        MOBILE_FRAME_THRESHOLD = 3
+        last_alert_time = 0
+        
+        processing_active = True
+        processing_stats['status'] = 'processing'
+        
         while cap.isOpened() and processing_active:
             ret, frame = cap.read()
             if not ret:
