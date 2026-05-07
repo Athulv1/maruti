@@ -1,6 +1,6 @@
 """
 Flask Web Application for Live Object Detection with ROI Counting
-Upload video and watch live detection with IN/OUT counting
+RTSP stream or local video with live detection + IN/OUT counting
 """
 
 from flask import Flask, render_template, request, Response, jsonify, send_from_directory
@@ -13,9 +13,12 @@ import time
 from pathlib import Path
 from inference import MobileOutDetector, CentroidTracker
 import numpy as np
-import pygame
-import face_recognition
-import pickle
+try:
+    import pygame
+    HAS_PYGAME = True
+except ImportError:
+    HAS_PYGAME = False
+    print("⚠️ pygame not installed — audio alerts disabled")
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -27,45 +30,23 @@ app.config['ALLOWED_EXTENSIONS'] = {'mp4', 'avi', 'mov', 'mkv'}
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 os.makedirs('violations', exist_ok=True)
-os.makedirs('face_detections', exist_ok=True)
 
 # Initialize pygame mixer for audio alerts
-pygame.mixer.init()
-ALERT_SOUND_PATH = '/home/athul/maruthi/violation_alert.wav'
+if HAS_PYGAME:
+    try:
+        pygame.mixer.init()
+    except:
+        HAS_PYGAME = False
+        print("⚠️ Audio not available")
+ALERT_SOUND_PATH = 'violation_alert.wav'
 
-# Load known faces
-known_face_encodings = []
-known_face_names = []
-KNOWN_FACES_DIR = 'known_faces'
-
-def load_known_faces():
-    """Load known faces from the known_faces directory"""
-    global known_face_encodings, known_face_names
-    
-    if not os.path.exists(KNOWN_FACES_DIR):
-        print(f"⚠️ Known faces directory not found: {KNOWN_FACES_DIR}")
-        return
-    
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        if filename.endswith(('.jpg', '.jpeg', '.png')):
-            filepath = os.path.join(KNOWN_FACES_DIR, filename)
-            try:
-                image = face_recognition.load_image_file(filepath)
-                encodings = face_recognition.face_encodings(image)
-                
-                if encodings:
-                    known_face_encodings.append(encodings[0])
-                    # Extract name from filename (remove extension and replace underscores)
-                    name = os.path.splitext(filename)[0].replace('_', ' ')
-                    known_face_names.append(name)
-                    print(f"✓ Loaded face: {name}")
-            except Exception as e:
-                print(f"✗ Error loading {filename}: {e}")
-    
-    print(f"✓ Total known faces loaded: {len(known_face_names)}")
-
-# Load known faces on startup
-load_known_faces()
+# Video source configuration
+# Set USE_RTSP=True when deploying on the server with camera access
+USE_RTSP = os.environ.get('USE_RTSP', 'false').lower() == 'true'
+RTSP_URL = 'rtsp://admin:Thinkneural%2312@192.168.150.10:554/Streaming/Channels/101'
+TEST_VIDEO = 'videos/test.mp4'
+MODEL_PATH = 'best.pt'
+ROI_CONFIG = 'roi_config.json'
 
 # Global variables for live streaming
 current_frame = None
@@ -79,7 +60,6 @@ processing_stats = {
     'status': 'idle'
 }
 violations_list = []  # Store mobile violation screenshots
-face_detections_list = []  # Store face detection screenshots
 frame_lock = threading.Lock()
 
 
@@ -119,49 +99,70 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
         processing_stats['total_frames'] = total_frames
         
         # Load ROI configuration
-        roi_line = None
-        is_custom_line = False
-        is_horizontal = False
-        line_pos = None
-        line_p1, line_p2 = None, None
-        
+        upper_poly = None
+        lower_poly = None
+        line_p1 = None  # tilted line endpoints
+        line_p2 = None
+
         if roi_config_file and os.path.exists(roi_config_file):
             with open(roi_config_file, 'r') as f:
                 roi_config = json.load(f)
-                config_type = roi_config.get('type', 'custom')
-                
-                if config_type == 'horizontal':
-                    roi_line = {'y': roi_config.get('y')}
-                elif config_type == 'vertical':
-                    roi_line = {'x': roi_config.get('x')}
-                elif config_type == 'custom' or 'line_points' in roi_config:
-                    line_points = roi_config.get('line_points')
-                    if line_points:
-                        roi_line = {'line_points': line_points}
-        
-        # Default ROI line if not configured
-        if roi_line is None:
-            roi_line = {'y': height // 2}
-        
-        # Determine line type
-        if 'line_points' in roi_line:
-            is_custom_line = True
-            line_p1, line_p2 = roi_line['line_points']
-        else:
-            is_horizontal = 'y' in roi_line
-            line_pos = roi_line.get('y') if is_horizontal else roi_line.get('x')
-        
+                config_type = roi_config.get('type', 'zones')
+
+                if config_type == 'zones':
+                    ub = roi_config.get('upper_box')
+                    lb = roi_config.get('lower_box')
+                    lp = roi_config.get('line_points')
+                    if ub and lb:
+                        upper_poly = np.array(ub, np.int32)
+                        lower_poly = np.array(lb, np.int32)
+                        print(f"  Upper zone: {len(ub)} points")
+                        print(f"  Lower zone: {len(lb)} points")
+                    if lp and len(lp) == 2:
+                        line_p1 = lp[0]
+                        line_p2 = lp[1]
+                        print(f"  Line: {line_p1} → {line_p2}")
+                    else:
+                        # Fallback horizontal line
+                        line_p1 = [0, height // 2]
+                        line_p2 = [width, height // 2]
+
+        # Default line if nothing loaded
+        if line_p1 is None:
+            line_p1 = [0, height // 2]
+            line_p2 = [width, height // 2]
+            print(f"  Using default horizontal line at y={height // 2}")
+
+        def line_side(cx, cy):
+            """Which side of the tilted line is the point on? Uses cross product.
+            Returns 'upper' or 'lower' relative to the line direction."""
+            dx = line_p2[0] - line_p1[0]
+            dy = line_p2[1] - line_p1[1]
+            cross = dx * (cy - line_p1[1]) - dy * (cx - line_p1[0])
+            return 'upper' if cross < 0 else 'lower'
+
+        def is_in_roi(cx, cy):
+            """Check if point is in either zone polygon"""
+            if upper_poly is not None and lower_poly is not None:
+                if cv2.pointPolygonTest(upper_poly, (float(cx), float(cy)), False) >= 0:
+                    return True
+                if cv2.pointPolygonTest(lower_poly, (float(cx), float(cy)), False) >= 0:
+                    return True
+                return False
+            return True
+
         # Initialize tracker
         tracker = CentroidTracker(max_disappeared=30)
         in_count = 0
         out_count = 0
         counted_ids = set()
-        
+        person_sides = {}  # Track which side of the LINE each person is on
+
         # Output video writer
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'processed_' + os.path.basename(video_path))
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        
+
         frame_count = 0
         start_time = time.time()
         
@@ -173,7 +174,7 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
             frame_count += 1
             processing_stats['frame_count'] = frame_count
             
-            # Run detection (NO FRAME SKIPPING - process every frame)
+            # Run detection
             results = detector.model(
                 frame,
                 conf=conf_threshold,
@@ -181,43 +182,41 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                 verbose=False
             )[0]
             
-            # Collect detections for tracking and check for mobile violations
+            # Collect detections
             detections_for_tracking = []
             mobile_detected_this_frame = False
             
             for box in results.boxes:
                 class_id = int(box.cls[0])
-                class_name = detector.class_names[class_id]
+                class_name = detector.model.names.get(class_id, f'class_{class_id}')
                 
-                if class_name == 'MOBILE':
+                if class_name == 'person_with_phone':
                     mobile_detected_this_frame = True
-                elif class_name == 'OUT':
+                    bbox = box.xyxy[0].cpu().numpy()
+                    detections_for_tracking.append(bbox)
+                elif class_name in ('person', 'person_without_phone'):
                     bbox = box.xyxy[0].cpu().numpy()
                     detections_for_tracking.append(bbox)
             
-            # Track mobile detections across frames
+            # Mobile violation tracking
             if mobile_detected_this_frame:
                 mobile_detection_frames += 1
             else:
-                mobile_detection_frames = 0  # Reset counter if no mobile in current frame
+                mobile_detection_frames = 0
             
-            # Play alert sound only if mobile detected in 3+ consecutive frames (with cooldown)
             if mobile_detection_frames >= MOBILE_FRAME_THRESHOLD:
                 current_time = time.time()
-                if current_time - last_alert_time >= 5:  # 5 second cooldown
+                if current_time - last_alert_time >= 5:
                     try:
-                        # Play audio alert
                         pygame.mixer.music.load(ALERT_SOUND_PATH)
                         pygame.mixer.music.play()
                         last_alert_time = current_time
                         
-                        # Capture screenshot
                         timestamp = time.strftime('%Y%m%d_%H%M%S')
                         violation_filename = f'mobile_violation_{timestamp}.jpg'
                         violation_path = os.path.join('violations', violation_filename)
                         cv2.imwrite(violation_path, frame)
                         
-                        # Add to violations list
                         global violations_list
                         violations_list.append({
                             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
@@ -225,144 +224,89 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                             'filename': violation_filename,
                             'path': violation_path
                         })
-                        
-                        print(f"🔊 Mobile violation alert triggered (detected in {mobile_detection_frames} consecutive frames)")
-                        print(f"📸 Screenshot saved: {violation_filename}")
+                        print(f"🔊 Mobile violation alert! Screenshot: {violation_filename}")
                     except Exception as e:
-                        print(f"Error playing alert sound: {e}")
-            
-            # Face Detection (process every 5th frame for performance)
-            if frame_count % 5 == 0:
-                try:
-                    # Resize frame for faster face detection
-                    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-                    rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Find all face locations and encodings
-                    face_locations = face_recognition.face_locations(rgb_small_frame)
-                    face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
-                    
-                    for face_encoding, face_location in zip(face_encodings, face_locations):
-                        # Compare with known faces
-                        matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=0.6)
-                        name = "Unknown"
-                        
-                        if True in matches:
-                            # Find best match
-                            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-                            best_match_index = np.argmin(face_distances)
-                            if matches[best_match_index]:
-                                name = known_face_names[best_match_index]
-                        
-                        # Scale back face location
-                        top, right, bottom, left = face_location
-                        top *= 4
-                        right *= 4
-                        bottom *= 4
-                        left *= 4
-                        
-                        # Draw rectangle and name on frame
-                        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-                        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
-                        cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
-                        
-                        # Save face detection screenshot (one per person per session)
-                        if name != "Unknown":
-                            global face_detections_list
-                            # Check if this person already detected in this session
-                            already_detected = any(d['name'] == name for d in face_detections_list)
-                            
-                            if not already_detected:
-                                timestamp = time.strftime('%Y%m%d_%H%M%S')
-                                face_filename = f'face_{name.replace(" ", "_")}_{timestamp}.jpg'
-                                face_path = os.path.join('face_detections', face_filename)
-                                cv2.imwrite(face_path, frame)
-                                
-                                face_detections_list.append({
-                                    'name': name,
-                                    'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
-                                    'frame_number': frame_count,
-                                    'filename': face_filename,
-                                    'path': face_path
-                                })
-                                
-                                print(f"👤 Face detected: {name} at frame {frame_count}")
-                                print(f"📸 Face screenshot saved: {face_filename}")
-                
-                except Exception as e:
-                    print(f"Face detection error: {e}")
+                        print(f"Error playing alert: {e}")
             
             # Update tracker
             objects = tracker.update(detections_for_tracking)
             
-            # Check line crossings
+            # LINE-BASED counting (cross-product determines side)
             for object_id, centroid in objects.items():
                 cx, cy = centroid
                 
-                if object_id not in tracker.crossed:
-                    tracker.crossed[object_id] = {'crossed': False, 'direction': None, 'start_side': None}
+                # Only count people inside ROI zones
+                if not is_in_roi(cx, cy):
+                    continue
                 
-                # Determine side
-                if is_custom_line:
-                    v1 = (line_p2[0] - line_p1[0], line_p2[1] - line_p1[1])
-                    v2 = (cx - line_p1[0], cy - line_p1[1])
-                    cross = v1[0] * v2[1] - v1[1] * v2[0]
-                    current_side = 'left' if cross > 0 else 'right'
-                elif is_horizontal:
-                    current_side = 'top' if cy < line_pos else 'bottom'
-                else:
-                    current_side = 'left' if cx < line_pos else 'right'
+                current_side = line_side(cx, cy)
                 
-                if tracker.crossed[object_id]['start_side'] is None:
-                    tracker.crossed[object_id]['start_side'] = current_side
+                # Initialize for new objects
+                if object_id not in person_sides:
+                    person_sides[object_id] = current_side
+                    continue
                 
-                # Detect crossing
-                if object_id not in counted_ids:
-                    start_side = tracker.crossed[object_id]['start_side']
-                    
-                    if is_custom_line or not is_horizontal:
-                        if start_side == 'left' and current_side == 'right':
-                            out_count += 1
-                            counted_ids.add(object_id)
-                        elif start_side == 'right' and current_side == 'left':
-                            in_count += 1
-                            counted_ids.add(object_id)
-                    else:
-                        if start_side == 'top' and current_side == 'bottom':
-                            out_count += 1
-                            counted_ids.add(object_id)
-                        elif start_side == 'bottom' and current_side == 'top':
-                            in_count += 1
-                            counted_ids.add(object_id)
+                prev_side = person_sides[object_id]
+                
+                # Count when crossing the line
+                if object_id not in counted_ids and prev_side != current_side:
+                    if prev_side == 'upper' and current_side == 'lower':
+                        out_count += 1
+                        counted_ids.add(object_id)
+                        print(f"  ✅ OUT+1: ID {object_id} crossed line at ({cx},{cy})")
+                    elif prev_side == 'lower' and current_side == 'upper':
+                        in_count += 1
+                        counted_ids.add(object_id)
+                        print(f"  ✅ IN+1: ID {object_id} crossed line at ({cx},{cy})")
+                
+                person_sides[object_id] = current_side
+            
+            # Clean up
+            active_ids = set(objects.keys())
+            for old_id in list(person_sides.keys()):
+                if old_id not in active_ids:
+                    del person_sides[old_id]
             
             processing_stats['in_count'] = in_count
             processing_stats['out_count'] = out_count
+            processing_stats['current_heads'] = len(objects)
             
             # Annotate frame
             annotated = results.plot()
             
-            # Draw ROI line
-            if is_custom_line:
-                cv2.line(annotated, tuple(line_p1), tuple(line_p2), (0, 255, 255), 3)
-                cv2.circle(annotated, tuple(line_p1), 8, (0, 255, 0), -1)
-                cv2.circle(annotated, tuple(line_p2), 8, (0, 0, 255), -1)
-            elif is_horizontal:
-                cv2.line(annotated, (0, line_pos), (width, line_pos), (0, 255, 255), 3)
-            else:
-                cv2.line(annotated, (line_pos, 0), (line_pos, height), (0, 255, 255), 3)
+            # Draw upper zone (green polygon)
+            if upper_poly is not None:
+                overlay = annotated.copy()
+                cv2.fillPoly(overlay, [upper_poly.reshape((-1, 1, 2))], (0, 255, 0))
+                cv2.addWeighted(overlay, 0.12, annotated, 0.88, 0, annotated)
+                cv2.polylines(annotated, [upper_poly.reshape((-1, 1, 2))], True, (0, 255, 0), 2)
             
-            # Draw tracked objects
+            # Draw lower zone (red polygon)
+            if lower_poly is not None:
+                overlay = annotated.copy()
+                cv2.fillPoly(overlay, [lower_poly.reshape((-1, 1, 2))], (0, 0, 255))
+                cv2.addWeighted(overlay, 0.12, annotated, 0.88, 0, annotated)
+                cv2.polylines(annotated, [lower_poly.reshape((-1, 1, 2))], True, (0, 0, 255), 2)
+            
+            # Draw counting line (tilted)
+            cv2.line(annotated, tuple(line_p1), tuple(line_p2), (0, 255, 255), 3)
+            cv2.circle(annotated, tuple(line_p1), 6, (0, 255, 255), -1)
+            cv2.circle(annotated, tuple(line_p2), 6, (0, 255, 255), -1)
+            
+            # Draw tracked objects with line-side info
             for object_id, centroid in objects.items():
                 cx, cy = centroid
-                cv2.circle(annotated, (cx, cy), 5, (0, 255, 0), -1)
+                side = person_sides.get(object_id, '?')
+                color = (0, 255, 0) if side == 'upper' else (0, 0, 255) if side == 'lower' else (200, 200, 200)
+                cv2.circle(annotated, (cx, cy), 5, color, -1)
                 cv2.putText(annotated, f"ID:{object_id}", (cx - 20, cy - 10),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             # Add stats overlay
-            cv2.rectangle(annotated, (10, 10), (700, 50), (0, 0, 0), -1)
-            text = f"Frame {frame_count}/{total_frames} | IN: {in_count} | OUT: {out_count}"
-            cv2.putText(annotated, text, (20, 35),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.rectangle(annotated, (10, 10), (400, 55), (0, 0, 0), -1)
+            text = f"IN: {in_count} | OUT: {out_count} | Heads: {len(objects)}"
+            cv2.putText(annotated, text, (20, 40),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
             
             # Calculate FPS
             elapsed = time.time() - start_time
@@ -386,7 +330,9 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
         processing_stats['status'] = 'completed'
         
     except Exception as e:
+        import traceback
         print(f"Error processing video: {e}")
+        traceback.print_exc()
         processing_stats['status'] = 'error'
     
     finally:
@@ -426,58 +372,38 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/upload', methods=['POST'])
-def upload_video():
-    """Handle video upload and start processing"""
-    global processing_active, current_frame, processing_stats
-    
+
+
+def get_video_source():
+    """Determine video source: RTSP if enabled and available, else test video"""
+    if USE_RTSP:
+        cap = cv2.VideoCapture(RTSP_URL)
+        if cap.isOpened():
+            cap.release()
+            return RTSP_URL
+        cap.release()
+        print(f"⚠️ RTSP not reachable, falling back to: {TEST_VIDEO}")
+    return TEST_VIDEO
+
+
+@app.route('/start')
+def start_stream():
+    """Start processing from RTSP or test video"""
+    global processing_active
     if processing_active:
-        return jsonify({'error': 'Processing already in progress'}), 400
+        return jsonify({'success': False, 'message': 'Already processing'})
     
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file provided'}), 400
+    source = get_video_source()
+    conf = float(request.args.get('confidence', 0.25))
     
-    file = request.files['video']
-    
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type. Allowed: mp4, avi, mov, mkv'}), 400
-    
-    # Save uploaded file
-    filename = secure_filename(file.filename)
-    video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(video_path)
-    
-    # Get parameters
-    conf_threshold = float(request.form.get('confidence', 0.25))
-    roi_config = request.form.get('roi_config', 'roi_config.json')
-    
-    # Reset stats
-    current_frame = None
-    processing_stats = {
-        'frame_count': 0,
-        'total_frames': 0,
-        'in_count': 0,
-        'out_count': 0,
-        'fps': 0,
-        'status': 'processing'
-    }
-    
-    # Start processing in background thread
     thread = threading.Thread(
         target=process_video_live,
-        args=(video_path, 'bestmaruthi.pt', roi_config, conf_threshold)
+        args=(source, MODEL_PATH, ROI_CONFIG, conf)
     )
     thread.daemon = True
     thread.start()
     
-    return jsonify({
-        'success': True,
-        'message': 'Video uploaded and processing started',
-        'filename': filename
-    })
+    return jsonify({'success': True, 'source': source})
 
 
 @app.route('/video_feed')
@@ -522,28 +448,26 @@ def get_violation_image(filename):
     return send_from_directory('violations', filename)
 
 
-@app.route('/face_detections')
-def get_face_detections():
-    """Get list of face detections"""
-    return jsonify({
-        'detections': face_detections_list,
-        'total': len(face_detections_list)
-    })
-
-
-@app.route('/face_detections/<filename>')
-def get_face_detection_image(filename):
-    """Serve face detection screenshot"""
-    return send_from_directory('face_detections', filename)
+def auto_start():
+    """Auto-start video processing after server starts"""
+    time.sleep(2)  # Wait for Flask to fully start
+    source = get_video_source()
+    print(f"▶️ Auto-starting detection from: {source}")
+    process_video_live(source, MODEL_PATH, ROI_CONFIG, 0.25)
 
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🚀 LIVE DETECTION WEB APP")
+    print("🚀 SAKSHI AI — Intelligent Security Monitoring")
     print("="*70)
-    print("📺 Open your browser and go to: http://localhost:5000")
-    print("📤 Upload a video and watch LIVE detection!")
-    print("🎯 All frames processed - No frame skipping")
+    print(f"📺 Dashboard: http://localhost:5000")
+    print(f"📹 RTSP: {RTSP_URL}")
+    print(f"🎬 Fallback: {TEST_VIDEO}")
+    print(f"🤖 Model: {MODEL_PATH}")
     print("="*70 + "\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    # Auto-start processing in background
+    auto_thread = threading.Thread(target=auto_start, daemon=True)
+    auto_thread.start()
+    
+    app.run(debug=False, host='0.0.0.0', port=5000, threaded=True)
