@@ -3,168 +3,46 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  
+  <title>SakshiAI — Live Monitoring</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',sans-serif;background:#F0F2F5;color:#1E293B;min-height:100vh;overflow:hidden}
-
-    /* Layout */
-    .shell{display:grid;grid-template-columns:130px 1fr;height:100vh}
-
-    /* Sidebar */
-    .sidebar{background:#fff;display:flex;flex-direction:column;align-items:center;padding:14px 0;border-right:1px solid #E5E7EB;height:100vh}
-    .logo{text-align:center;margin-bottom:20px;padding:0 10px}
-    .logo img{width:90px;height:auto}
-    .nav{display:flex;flex-direction:column;gap:4px;width:100%;padding:0 10px;flex:1}
-    .nav-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:10px;border:none;background:none;cursor:pointer;color:#6B7280;font-size:12px;font-weight:600;transition:all .15s;width:100%}
-    .nav-btn:hover{background:#F3F4F6;color:#1E293B}
-    .nav-btn.active{background:#2563EB;color:#fff}
-    .nav-btn .ico{font-size:22px}
-    .clock{margin-top:auto;text-align:center;padding:10px 6px;border-top:1px solid #E5E7EB;width:100%}
-    .clock-time{font-size:14px;font-weight:700;color:#1E293B;display:flex;align-items:center;gap:4px;justify-content:center}
-    .clock-date{font-size:11px;color:#9CA3AF;margin-top:2px;line-height:1.3}
-
-    /* Main */
-    .main{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-
-    /* Header */
-    .header{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;background:#fff;border-bottom:1px solid #E5E7EB}
-    .header-left{display:flex;align-items:center;gap:12px}
-    .header-left img{height:36px;width:auto}
-    .header-left h1{font-size:22px;font-weight:800;color:#1E293B}
-    .header-left p{font-size:13px;color:#6B7280;margin-top:1px}
-    .header-right{display:flex;align-items:center;gap:12px}
-    .status-pill{display:flex;align-items:center;gap:8px;padding:8px 18px;border-radius:24px;border:1px solid #E5E7EB;font-size:14px;font-weight:600;color:#1E293B;background:#fff}
-    .status-dot{width:10px;height:10px;border-radius:50%}
-    .status-dot.idle{background:#22C55E}
-    .status-dot.active{background:#22C55E;animation:blink 1.5s infinite}
-    .status-dot.error{background:#EF4444}
-    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-    .gear-btn{width:40px;height:40px;border-radius:50%;border:1px solid #E5E7EB;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;color:#6B7280;transition:all .15s}
-    .gear-btn:hover{background:#F3F4F6;color:#1E293B}
-
-    /* Content Grid */
-    .content{display:grid;grid-template-columns:1fr 320px;gap:0;flex:1;overflow-y:auto}
-    .left-col{padding:10px 20px;display:flex;flex-direction:column;gap:8px}
-    .right-col{background:#fff;border-left:1px solid #E5E7EB;padding:18px 20px;display:flex;flex-direction:column;gap:18px;overflow-y:auto}
-
-    /* Video */
-    .video-card{background:#0F172A;border-radius:12px;overflow:hidden;position:relative;max-height:240px}
-    .video-card img{width:100%;height:100%;object-fit:contain;display:block;max-height:240px}
-    .live-badge{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.6);color:#fff;padding:5px 14px;border-radius:8px;font-size:13px;font-weight:700;backdrop-filter:blur(4px)}
-    .live-badge .dot{width:8px;height:8px;background:#EF4444;border-radius:50%;animation:blink 1.2s infinite}
-    .fs-btn{position:absolute;top:14px;right:14px;background:rgba(0,0,0,.5);border:none;color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;backdrop-filter:blur(4px)}
-    .fs-btn:hover{background:rgba(0,0,0,.7)}
-
-    /* Video Controls */
-    .vid-controls{display:flex;align-items:center;gap:10px;padding:4px 0;flex-wrap:wrap}
-    .vol-group{display:flex;align-items:center;gap:8px}
-    .vol-group span{font-size:18px;color:#6B7280}
-    .vol-slider{width:80px;accent-color:#2563EB;height:4px}
-    .ctrl-btn{width:36px;height:36px;border-radius:10px;border:1px solid #E5E7EB;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#6B7280;transition:all .15s}
-    .ctrl-btn:hover{background:#F3F4F6;color:#1E293B}
-    .quality-sel{padding:6px 14px;border-radius:10px;border:1px solid #E5E7EB;background:#fff;font-size:14px;font-weight:500;color:#1E293B;cursor:pointer}
-
-    /* Timeline */
-    .timeline{background:#fff;border-radius:12px;padding:10px 16px;border:1px solid #E5E7EB}
-    .tl-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px}
-    .tl-date{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;color:#1E293B;padding:5px 12px;border:1px solid #E5E7EB;border-radius:8px;background:#fff}
-    .tl-time{font-size:22px;font-weight:800;color:#1E293B;display:flex;align-items:center;gap:8px}
-    .tl-live{background:#2563EB;color:#fff;font-size:12px;font-weight:700;padding:3px 12px;border-radius:5px}
-    .tl-bar{display:flex;align-items:center;gap:6px}
-    .tl-arrow{width:32px;height:32px;border-radius:50%;border:1px solid #E5E7EB;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:#6B7280}
-    .tl-arrow:hover{background:#F3F4F6}
-    .tl-track{flex:1;position:relative;height:6px;background:#E5E7EB;border-radius:3px}
-    .tl-fill{position:absolute;left:0;top:0;height:100%;background:#2563EB;border-radius:3px;width:50%}
-    .tl-thumb{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;background:#2563EB;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.2);left:50%}
-    .tl-labels{display:flex;justify-content:space-between;margin-top:4px;font-size:12px;color:#9CA3AF;font-weight:500}
-
-    /* Bottom Stats */
-    .bottom-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-    .bstat{background:#fff;border-radius:12px;padding:10px 12px;border:1px solid #E5E7EB;display:flex;align-items:center;gap:10px}
-    .bstat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-    .bstat-icon.blue{background:#EFF6FF;color:#2563EB}
-    .bstat-icon.red{background:#FEF2F2;color:#EF4444}
-    .bstat-icon.purple{background:#F5F3FF;color:#7C3AED}
-    .bstat-icon.green{background:#F0FDF4;color:#16A34A}
-    .bstat-label{font-size:11px;font-weight:600;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px}
-    .bstat-val{font-size:22px;font-weight:800;margin-top:1px}
-    .bstat-val.blue{color:#2563EB}
-    .bstat-val.red{color:#EF4444}
-    .bstat-val.purple{color:#7C3AED}
-    .bstat-val.green{color:#16A34A}
-    .bstat-sub{font-size:10px;color:#9CA3AF;margin-top:1px}
-
-    /* Right Panel Sections */
-    .panel-title{font-size:13px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
-    .counter-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .counter-box{border:1px solid #E5E7EB;border-radius:10px;padding:12px;text-align:center;transition:transform .15s}
-    .counter-box:hover{transform:translateY(-2px)}
-    .counter-val{font-size:30px;font-weight:800}
-    .counter-val.blue{color:#2563EB}
-    .counter-val.red{color:#EF4444}
-    .counter-label{font-size:12px;font-weight:600;color:#9CA3AF;margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
-    .fps-row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:14px}
-    .fps-row span:first-child{color:#6B7280;font-weight:500}
-    .fps-row span:last-child{color:#2563EB;font-weight:700}
-
-    .line-section{border-top:1px solid #E5E7EB;padding-top:20px}
-    .line-desc{font-size:13px;color:#9CA3AF;margin-bottom:12px}
-    .line-slider{width:100%;accent-color:#2563EB}
-    .line-val{font-size:14px;color:#2563EB;font-weight:600;margin-top:6px}
-
-    .viol-section{border-top:1px solid #E5E7EB;padding-top:20px}
-    .viol-card{display:flex;align-items:center;gap:14px;margin-top:10px}
-    .viol-count{font-size:36px;font-weight:800;color:#EF4444}
-    .viol-text{font-size:13px;color:#9CA3AF}
-    .viol-thumb{width:60px;height:80px;background:#F3F4F6;border-radius:10px;border:1px solid #E5E7EB;display:flex;align-items:center;justify-content:center;font-size:24px;color:#D1D5DB;margin-left:auto}
-
-    /* Footer */
-    .footer{text-align:center;padding:10px;font-size:14px;color:#6B7280;border-top:1px solid #E5E7EB;background:#fff;display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0}
-    .footer img{height:26px;width:auto;border-radius:6px}
-    .footer strong{color:#2563EB}
-
-    /* Sections */
-    .page{display:none}.page.active{display:flex;flex-direction:column;flex:1}
-
-    /* Reports / AI Insights placeholders */
-    .placeholder-page{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:40px}
-    .placeholder-page .big{font-size:64px}
-    .placeholder-page h2{font-size:22px;font-weight:700;color:#1E293B}
-    .placeholder-page p{color:#9CA3AF;font-size:14px}
-  </style>
+  <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
 <div class="shell">
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="logo">
-      <img src="/static/Maruti.png" alt="Maruti Suzuki">
-    </div>
+    <div class="logo"><img src="/static/Maruti.png" alt="Maruti"></div>
     <nav class="nav">
-      <button class="nav-btn active" data-page="live"><span class="ico">🎥</span>Live</button>
-      <button class="nav-btn" data-page="reports"><span class="ico">📊</span>Reports</button>
-      <button class="nav-btn" data-page="insights"><span class="ico">🧠</span>AI Insights</button>
-      <button class="nav-btn" data-page="settings"><span class="ico">⚙️</span>Settings</button>
+      <button class="nav-btn active" data-page="live"><span class="ico">●</span>Live Monitoring</button>
+      <button class="nav-btn" data-page="reports"><span class="ico">◩</span>Reports</button>
+      <button class="nav-btn" data-page="insights"><span class="ico">◆</span>Insights</button>
+      <button class="nav-btn" data-page="settings"><span class="ico">◎</span>Settings</button>
     </nav>
-    <div class="clock">
-      <div class="clock-time">🕐 <span id="clockTime">--:--</span></div>
-      <div class="clock-date" id="clockDate">--</div>
-    </div>
+    <div class="sys-status"><span class="sys-dot"></span>All Systems Operational</div>
+
   </aside>
 
-  <!-- Main -->
   <div class="main">
     <!-- Header -->
     <div class="header">
-      <div class="header-left"><img src="/static/Sakshi.png" alt="Sakshi AI"><div></div></div>
-      <div class="header-right">
-        <button class="ctrl-btn" id="startBtn" onclick="startStream()" title="Start Detection" style="background:#DCFCE7;color:#16A34A;font-size:14px;width:auto;padding:0 12px">▶ Start</button>
-        <button class="ctrl-btn" id="stopBtn" onclick="stopStream()" title="Stop Detection" style="background:#FEE2E2;color:#DC2626;font-size:14px;width:auto;padding:0 12px">⏹ Stop</button>
-        <div class="status-pill"><span class="status-dot idle" id="statusDot"></span><span id="statusText">IDLE</span></div>
-        <button class="gear-btn" title="Settings">⚙️</button>
+      <div class="header-left">
+        <img src="/static/Sakshi.png" alt="Sakshi AI" style="height:32px;width:auto">
       </div>
+      <div class="header-right">
+        <span class="live-pill"><span class="lp-dot"></span>LIVE</span>
+        <div class="status-pill"><span class="status-dot idle" id="statusDot"></span><span id="statusText">IDLE</span></div>
+        <div class="clock-pill" id="clockPill">--:-- PM</div>
+      </div>
+    </div>
+
+    <!-- Top Stats Bar -->
+    <div class="top-stats">
+      <div class="ts-cam"><span class="ts-cam-label">CAM 01</span><span class="ts-cam-loc">Entrance</span><span class="ts-live">LIVE</span></div>
+      <div class="ts-card"><div class="ts-val blue" id="tsIn">0</div><div class="ts-label">People Entered (IN)</div><div class="ts-sub">Today</div></div>
+      <div class="ts-card"><div class="ts-val red" id="tsOut">0</div><div class="ts-label">People Exited (OUT)</div><div class="ts-sub">Today</div></div>
+      <div class="ts-card"><div class="ts-val green" id="tsInside">0</div><div class="ts-label">Currently Inside</div><div class="ts-sub">In Area</div></div>
+      <div class="ts-card"><div class="ts-val purple" id="tsPeak">0</div><div class="ts-label">Peak Today</div><div class="ts-sub" id="tsPeakTime">--</div></div>
+      <div class="ts-card"><div class="ts-val orange" id="tsHeads">0</div><div class="ts-label">In Frame</div><div class="ts-sub">Current</div></div>
     </div>
 
     <!-- Live Page -->
@@ -173,165 +51,73 @@
         <div class="left-col">
           <!-- Video -->
           <div class="video-card">
-            <div class="live-badge"><span class="dot"></span>LIVE</div>
-            <button class="fs-btn" title="Fullscreen">⛶</button>
+            <div class="vid-top"><span class="vid-label">CAM 01 › Entrance</span><span class="vid-live"><span class="vl-dot"></span>LIVE</span><span class="vid-fps" id="vidFps">-- FPS</span></div>
             <img id="videoFeed" src="/video_feed" alt="Live Feed">
           </div>
-          <!-- Controls -->
-          <div class="vid-controls">
-            <div class="vol-group"><span>🔊</span><input type="range" class="vol-slider" min="0" max="100" value="70"></div>
-            <button class="ctrl-btn" title="Screenshot">📷</button>
-            <button class="ctrl-btn" title="Record">🎥</button>
-            <button class="ctrl-btn" title="Mic">🎤</button>
-            <div style="margin-left:auto;display:flex;gap:8px">
-              <select class="quality-sel"><option>High</option><option>Medium</option><option>Low</option></select>
-              <button class="ctrl-btn" title="Grid View">⊞</button>
+
+          <!-- Bottom Charts Row -->
+          <div class="charts-row">
+            <div class="chart-card">
+              <div class="cc-header"><span class="cc-title">Entry &amp; Exit Trend</span><span class="cc-badge">Real-time</span></div>
+              <div class="chart-bars" id="trendChart"></div>
             </div>
-          </div>
-          <!-- Timeline -->
-          <div class="timeline">
-            <div class="tl-top">
-              <div class="tl-date">📅 <span id="tlDate">--</span></div>
-              <div class="tl-time"><span id="tlTime">--:--:--</span><span class="tl-live">LIVE</span></div>
+            <div class="chart-card">
+              <div class="cc-header"><span class="cc-title">Recent Events</span><span class="cc-link" id="evtCount">0 events</span></div>
+              <div class="events-list" id="eventsList"><div class="evt-empty">Waiting for activity...</div></div>
             </div>
-            <div class="tl-bar">
-              <button class="tl-arrow">◀</button>
-              <div class="tl-track"><div class="tl-fill"></div><div class="tl-thumb"></div></div>
-              <button class="tl-arrow">▶</button>
-            </div>
-            <div class="tl-labels"><span>12:00 PM</span><span>12:15 PM</span><span>12:30 PM</span><span>12:45 PM</span><span>1:00 PM</span><span>1:15 PM</span><span>1:30 PM</span></div>
-          </div>
-          <!-- Bottom Stats -->
-          <div class="bottom-stats">
-            <div class="bstat"><div class="bstat-icon blue">👥</div><div><div class="bstat-label">Total Entered</div><div class="bstat-val blue" id="totalIn">0</div></div></div>
-            <div class="bstat"><div class="bstat-icon red">👥</div><div><div class="bstat-label">Total Exited</div><div class="bstat-val red" id="totalOut">0</div></div></div>
-            <div class="bstat"><div class="bstat-icon purple">📈</div><div><div class="bstat-label">Peak Today</div><div class="bstat-val purple" id="peakVal">0</div><div class="bstat-sub" id="peakTime">--</div></div></div>
-            <div class="bstat"><div class="bstat-icon green">⏱</div><div><div class="bstat-label">Occupancy Rate</div><div class="bstat-val green" id="occRate">0%</div><div class="bstat-sub" id="occSub">--</div></div></div>
           </div>
         </div>
+
         <!-- Right Panel -->
         <div class="right-col">
-          <div>
-            <div class="panel-title">People Counter</div>
-            <div class="counter-grid">
-              <div class="counter-box"><div class="counter-val blue" id="inCount">0</div><div class="counter-label">IN</div></div>
-              <div class="counter-box"><div class="counter-val red" id="outCount">0</div><div class="counter-label">OUT</div></div>
-              <div class="counter-box"><div class="counter-val blue" id="inFrame">0</div><div class="counter-label">In Frame</div></div>
-              <div class="counter-box"><div class="counter-val red" id="phoneAlerts">0</div><div class="counter-label">Phone Alerts</div></div>
+          <!-- Occupancy -->
+          <div class="rp-card">
+            <div class="rp-title">Occupancy Overview</div>
+            <div class="occ-row">
+              <div class="occ-gauge">
+                <svg width="90" height="90" viewBox="0 0 90 90">
+                  <defs><linearGradient id="gG" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#60A5FA"/></linearGradient></defs>
+                  <circle cx="45" cy="45" r="38" fill="none" stroke="#E5E7EB" stroke-width="7"/>
+                  <circle id="occRing" cx="45" cy="45" r="38" fill="none" stroke="url(#gG)" stroke-width="7" stroke-linecap="round" stroke-dasharray="239" stroke-dashoffset="239" transform="rotate(-90 45 45)"/>
+                </svg>
+                <div class="occ-center"><span id="occVal">0</span><small>Inside</small></div>
+              </div>
+              <div class="occ-details">
+                <div class="occ-row-item"><span>Max Capacity</span><span>50</span></div>
+                <div class="occ-row-item"><span>Occupancy</span><span id="occPct">0%</span></div>
+                <div class="occ-row-item"><span>Available</span><span id="occAvail">50</span></div>
+              </div>
             </div>
-            <div class="fps-row"><span>Detection FPS</span><span id="fpsVal">--</span></div>
           </div>
-          <div class="line-section">
-            <div class="panel-title">Count Line Position</div>
-            <div class="line-desc">Drag to move the horizontal count line</div>
-            <input type="range" class="line-slider" id="lineSlider" min="10" max="90" value="38">
-            <div class="line-val" id="lineVal">Line at 38% from top</div>
-          </div>
-          <div class="viol-section">
-            <div class="panel-title">Phone Violations</div>
-            <div class="viol-card">
-              <div><div class="viol-count" id="violCount">0</div><div class="viol-text" id="violText">No violations yet</div></div>
-              <div class="viol-thumb" id="violThumb">📱</div>
+
+          <!-- Phone Detection -->
+          <div class="rp-card">
+            <div class="rp-title">Phone Usage Detection</div>
+            <div class="phone-row">
+              <div class="phone-count"><span class="pc-val" id="phoneTotal">0</span><small>Today</small></div>
+              <div class="phone-bars">
+                <div class="pb-item"><span class="pb-dot red"></span><span>With Phone</span><span class="pb-num" id="phoneWith">0</span></div>
+                <div class="pb-item"><span class="pb-dot green"></span><span>Without Phone</span><span class="pb-num" id="phoneWithout">0</span></div>
+              </div>
             </div>
+          </div>
+
+          <!-- Recent Violations -->
+          <div class="rp-card">
+            <div class="rp-title">Recent Phone Detections<span class="rp-link">View all</span></div>
+            <div class="viol-list" id="violList"><div class="evt-empty">No violations yet</div></div>
           </div>
         </div>
       </div>
-      <div class="footer">Powered by <img src="/static/thinkneuralai_logo.jpg" alt="Thinkneuralai"> <strong style="color:#1E293B">Thinkneuralai</strong></div>
+      <div class="footer">Powered by <img src="/static/thinkneuralai_logo.jpg" alt="TNai"> <strong>Thinkneuralai</strong></div>
     </div>
 
-    <!-- Reports Page -->
-    <div class="page" id="pg-reports"><div class="placeholder-page"><div class="big">📊</div><h2>Reports</h2><p>Analytics and historical data coming soon</p></div></div>
-    <!-- Insights Page -->
-    <div class="page" id="pg-insights"><div class="placeholder-page"><div class="big">🧠</div><h2>AI Insights</h2><p>Intelligent analytics coming soon</p></div></div>
-    <!-- Settings Page -->
-    <div class="page" id="pg-settings"><div class="placeholder-page"><div class="big">⚙️</div><h2>Settings</h2><p>Configuration options coming soon</p></div></div>
+    <!-- Other Pages -->
+    <div class="page" id="pg-reports"><div class="placeholder-page"><div class="ph-icon">◩</div><h2>Reports</h2><p>Historical analytics and daily reports</p></div></div>
+    <div class="page" id="pg-insights"><div class="placeholder-page"><div class="ph-icon">◆</div><h2>Insights</h2><p>AI-powered trend analysis</p></div></div>
+    <div class="page" id="pg-settings"><div class="placeholder-page"><div class="ph-icon">◎</div><h2>Settings</h2><p>System configuration</p></div></div>
   </div>
 </div>
-
-<script>
-// Navigation
-document.querySelectorAll('.nav-btn').forEach(b=>{
-  b.addEventListener('click',()=>{
-    document.querySelectorAll('.nav-btn').forEach(n=>n.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-    b.classList.add('active');
-    const pg=document.getElementById('pg-'+b.dataset.page);
-    if(pg)pg.classList.add('active');
-  });
-});
-
-// Clock
-function updateClock(){
-  const now=new Date();
-  const h=now.getHours(),m=now.getMinutes();
-  const ampm=h>=12?'PM':'AM';
-  const h12=h%12||12;
-  const time=`${h12}:${String(m).padStart(2,'0')} ${ampm}`;
-  const full=`${h12}:${String(m).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} ${ampm}`;
-  document.getElementById('clockTime').textContent=time;
-  const opts={year:'numeric',month:'long',day:'numeric'};
-  const dateStr=now.toLocaleDateString('en-US',opts);
-  const day=now.toLocaleDateString('en-US',{weekday:'long'});
-  document.getElementById('clockDate').textContent=`${dateStr}\n${day}`;
-  document.getElementById('tlTime').textContent=full;
-  document.getElementById('tlDate').textContent=now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-}
-updateClock();setInterval(updateClock,1000);
-
-// Line slider
-const ls=document.getElementById('lineSlider');
-ls.addEventListener('input',()=>{document.getElementById('lineVal').textContent=`Line at ${ls.value}% from top`;});
-
-// Stats polling
-let violations=0;
-setInterval(async()=>{
-  try{
-    const r=await fetch('/stats');const s=await r.json();
-    document.getElementById('inCount').textContent=s.in_count||0;
-    document.getElementById('outCount').textContent=s.out_count||0;
-    document.getElementById('totalIn').textContent=s.in_count||0;
-    document.getElementById('totalOut').textContent=s.out_count||0;
-    document.getElementById('fpsVal').textContent=(s.fps||0).toFixed(1);
-    document.getElementById('inFrame').textContent=s.current_heads||0;
-    const st=document.getElementById('statusDot'),stxt=document.getElementById('statusText');
-    if(s.status==='processing'){st.className='status-dot active';stxt.textContent='ACTIVE';}
-    else if(s.status==='completed'){st.className='status-dot idle';stxt.textContent='DONE';}
-    else if(s.status==='error'){st.className='status-dot error';stxt.textContent='ERROR';}
-    else{st.className='status-dot idle';stxt.textContent='IDLE';}
-  }catch(e){}
-},800);
-
-// Violations polling
-setInterval(async()=>{
-  try{
-    const r=await fetch('/violations');const d=await r.json();
-    document.getElementById('violCount').textContent=d.total||0;
-    document.getElementById('phoneAlerts').textContent=d.total||0;
-    if(d.total>0){
-      document.getElementById('violText').textContent=`${d.total} violation(s) detected`;
-      if(d.violations&&d.violations.length){
-        const last=d.violations[d.violations.length-1];
-        document.getElementById('violThumb').innerHTML=`<img src="/violations/${last.filename}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`;
-      }
-    }else{document.getElementById('violText').textContent='No violations yet';}
-  }catch(e){}
-},2000);
-// Start/Stop stream
-async function startStream(){
-  try{
-    const r=await fetch('/start');const d=await r.json();
-    if(d.success){
-      document.getElementById('videoFeed').src='/video_feed?'+Date.now();
-      document.getElementById('startBtn').disabled=true;
-    }else{alert(d.message||'Could not start');}
-  }catch(e){alert('Error: '+e.message);}
-}
-async function stopStream(){
-  try{
-    await fetch('/stop');
-    document.getElementById('startBtn').disabled=false;
-  }catch(e){}
-}
-</script>
+<script src="/static/dashboard.js"></script>
 </body>
 </html>
