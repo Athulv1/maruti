@@ -128,8 +128,11 @@ class MobileOutDetector:
             conf_threshold: Confidence threshold for detections
             iou_threshold: IOU threshold for NMS
         """
-        print(f"Loading model from: {model_path}")
+        import torch
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"Loading model from: {model_path} on {self.device}")
         self.model = YOLO(model_path)
+        self.model.to(self.device)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
         self.class_names = {0: 'MOBILE', 1: 'OUT'}

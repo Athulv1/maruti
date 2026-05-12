@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from inference import MobileOutDetector, CentroidTracker
 import numpy as np
+import psycopg2
+from psycopg2.extras import RealDictCursor
 try:
     import pygame
     HAS_PYGAME = True
@@ -40,9 +42,67 @@ if HAS_PYGAME:
         print("⚠️ Audio not available")
 ALERT_SOUND_PATH = 'violation_alert.wav'
 
+# PostgreSQL config
+DB_CONFIG = {
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'port': int(os.environ.get('DB_PORT', 5432)),
+    'dbname': os.environ.get('DB_NAME', 'sakshiai_maruti'),
+    'user': os.environ.get('DB_USER', 'postgres'),
+    'password': os.environ.get('DB_PASSWORD', 'Postgres123'),
+}
+
+def _get_db():
+    return psycopg2.connect(**DB_CONFIG)
+
+def _init_db():
+    with _get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS people_counts (
+                    id INTEGER PRIMARY KEY DEFAULT 1,
+                    in_count INTEGER NOT NULL DEFAULT 0,
+                    out_count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    CHECK (id = 1)
+                )
+            """)
+            cur.execute("""
+                INSERT INTO people_counts (id, in_count, out_count)
+                VALUES (1, 0, 0)
+                ON CONFLICT (id) DO NOTHING
+            """)
+
+def _load_counts():
+    try:
+        with _get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT in_count, out_count FROM people_counts WHERE id = 1")
+                row = cur.fetchone()
+                return (row[0], row[1]) if row else (0, 0)
+    except Exception as e:
+        print(f"⚠️ DB load error: {e}")
+        return 0, 0
+
+def _save_counts(in_count, out_count):
+    try:
+        with _get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE people_counts
+                    SET in_count = %s, out_count = %s, updated_at = NOW()
+                    WHERE id = 1
+                """, (in_count, out_count))
+    except Exception as e:
+        print(f"⚠️ DB save error: {e}")
+
+try:
+    _init_db()
+    print("✅ PostgreSQL connected")
+except Exception as e:
+    print(f"⚠️ PostgreSQL unavailable: {e}")
+
 # Video source configuration
-# Set USE_RTSP=True when deploying on the server with camera access
-USE_RTSP = os.environ.get('USE_RTSP', 'false').lower() == 'true'
+USE_RTSP = os.environ.get('USE_RTSP', 'true').lower() == 'true'
 RTSP_URL = 'rtsp://admin:Thinkneural%2312@192.168.150.10:554/Streaming/Channels/101'
 TEST_VIDEO = 'videos/test.mp4'
 MODEL_PATH = 'best.pt'
@@ -51,11 +111,12 @@ ROI_CONFIG = 'roi_config.json'
 # Global variables for live streaming
 current_frame = None
 processing_active = False
+_saved_in, _saved_out = _load_counts()
 processing_stats = {
     'frame_count': 0,
     'total_frames': 0,
-    'in_count': 0,
-    'out_count': 0,
+    'in_count': _saved_in,
+    'out_count': _saved_out,
     'fps': 0,
     'status': 'idle'
 }
@@ -89,9 +150,12 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
         if not cap.isOpened():
             processing_stats['status'] = 'error'
             return
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # minimize RTSP latency
         
         # Get video properties
         fps = int(cap.get(cv2.CAP_PROP_FPS))
+        if fps <= 0:
+            fps = 25  # RTSP streams often return 0
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -153,51 +217,67 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
 
         # Initialize tracker
         tracker = CentroidTracker(max_disappeared=30)
-        in_count = 0
-        out_count = 0
+        in_count, out_count = _load_counts()
         counted_ids = set()
         person_sides = {}  # Track which side of the LINE each person is on
 
         # Output video writer
-        output_path = os.path.join(app.config['OUTPUT_FOLDER'], 'processed_' + os.path.basename(video_path))
+        source_label = 'live_' + time.strftime('%Y%m%d_%H%M%S')
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], f'processed_{source_label}.mp4')
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
         frame_count = 0
         start_time = time.time()
-        
+
         # Mobile violation tracking
         mobile_detection_frames = 0
         MOBILE_FRAME_THRESHOLD = 3
         last_alert_time = 0
-        
+
+        # Performance: run inference every N frames, reuse last result in between
+        DETECT_EVERY = 2
+        last_results = None
+
+        # Inference resolution (width); keep aspect ratio
+        INFER_WIDTH = 640
+        infer_scale = INFER_WIDTH / width if width > INFER_WIDTH else 1.0
+        infer_size = (INFER_WIDTH, int(height * infer_scale)) if infer_scale < 1.0 else (width, height)
+
         processing_active = True
         processing_stats['status'] = 'processing'
-        
+
         while cap.isOpened() and processing_active:
             ret, frame = cap.read()
             if not ret:
                 break
-            
+
             frame_count += 1
             processing_stats['frame_count'] = frame_count
-            
-            # Run detection
-            results = detector.model(
-                frame,
-                conf=conf_threshold,
-                iou=0.45,
-                verbose=False
-            )[0]
+
+            # Run detection on every DETECT_EVERY frame, reuse otherwise
+            if frame_count % DETECT_EVERY == 0 or last_results is None:
+                small = cv2.resize(frame, infer_size) if infer_scale < 1.0 else frame
+                results = detector.model(
+                    small,
+                    conf=conf_threshold,
+                    iou=0.45,
+                    verbose=False,
+                    imgsz=INFER_WIDTH,
+                    device=detector.device
+                )[0]
+                last_results = results
+            else:
+                results = last_results
             
             # Collect detections
             detections_for_tracking = []
             mobile_detected_this_frame = False
-            
+
             for box in results.boxes:
                 class_id = int(box.cls[0])
                 class_name = detector.model.names.get(class_id, f'class_{class_id}')
-                
+
                 if class_name == 'person_with_phone':
                     mobile_detected_this_frame = True
                     bbox = box.xyxy[0].cpu().numpy()
@@ -205,6 +285,13 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                 elif class_name in ('person', 'person_without_phone'):
                     bbox = box.xyxy[0].cpu().numpy()
                     detections_for_tracking.append(bbox)
+
+            # Scale bounding boxes back to original resolution so ROI/line coords match
+            if infer_scale < 1.0 and detections_for_tracking:
+                detections_for_tracking = [
+                    [x1 / infer_scale, y1 / infer_scale, x2 / infer_scale, y2 / infer_scale]
+                    for x1, y1, x2, y2 in detections_for_tracking
+                ]
             
             # Mobile violation tracking
             if mobile_detected_this_frame:
@@ -261,10 +348,12 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                     if prev_side == 'upper' and current_side == 'lower':
                         out_count += 1
                         counted_ids.add(object_id)
+                        _save_counts(in_count, out_count)
                         print(f"  ✅ OUT+1: ID {object_id} crossed line at ({cx},{cy})")
                     elif prev_side == 'lower' and current_side == 'upper':
                         in_count += 1
                         counted_ids.add(object_id)
+                        _save_counts(in_count, out_count)
                         print(f"  ✅ IN+1: ID {object_id} crossed line at ({cx},{cy})")
                 
                 person_sides[object_id] = current_side
@@ -279,8 +368,10 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
             processing_stats['out_count'] = out_count
             processing_stats['current_heads'] = len(objects)
             
-            # Annotate frame
+            # Annotate frame (scale back to original resolution if inference was downscaled)
             annotated = results.plot()
+            if infer_scale < 1.0:
+                annotated = cv2.resize(annotated, (width, height))
             
             # Draw upper zone (green polygon)
             if upper_poly is not None:
@@ -328,8 +419,6 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
             # Write to output video
             out.write(annotated)
             
-            # Small delay to control streaming speed
-            time.sleep(0.01)
         
         # Cleanup
         cap.release()
@@ -433,6 +522,15 @@ def stop_processing():
     global processing_active
     processing_active = False
     return jsonify({'success': True, 'message': 'Processing stopped'})
+
+
+@app.route('/reset_counts', methods=['POST'])
+def reset_counts():
+    """Reset IN/OUT counts to zero in DB and memory"""
+    _save_counts(0, 0)
+    processing_stats['in_count'] = 0
+    processing_stats['out_count'] = 0
+    return jsonify({'success': True, 'message': 'Counts reset to 0'})
 
 
 @app.route('/outputs/<filename>')
