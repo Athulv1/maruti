@@ -6,6 +6,7 @@
   <title>SakshiAI — Live Monitoring</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -70,26 +71,6 @@
 
         <!-- Right Panel -->
         <div class="right-col">
-          <!-- Occupancy -->
-          <div class="rp-card">
-            <div class="rp-title">Occupancy Overview</div>
-            <div class="occ-row">
-              <div class="occ-gauge">
-                <svg width="90" height="90" viewBox="0 0 90 90">
-                  <defs><linearGradient id="gG" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#60A5FA"/></linearGradient></defs>
-                  <circle cx="45" cy="45" r="38" fill="none" stroke="#E5E7EB" stroke-width="7"/>
-                  <circle id="occRing" cx="45" cy="45" r="38" fill="none" stroke="url(#gG)" stroke-width="7" stroke-linecap="round" stroke-dasharray="239" stroke-dashoffset="239" transform="rotate(-90 45 45)"/>
-                </svg>
-                <div class="occ-center"><span id="occVal">0</span><small>Inside</small></div>
-              </div>
-              <div class="occ-details">
-                <div class="occ-row-item"><span>Max Capacity</span><span>50</span></div>
-                <div class="occ-row-item"><span>Occupancy</span><span id="occPct">0%</span></div>
-                <div class="occ-row-item"><span>Available</span><span id="occAvail">50</span></div>
-              </div>
-            </div>
-          </div>
-
           <!-- Phone Detection -->
           <div class="rp-card">
             <div class="rp-title">Phone Usage Detection</div>
@@ -107,13 +88,167 @@
             <div class="rp-title">Recent Phone Detections<span class="rp-link">View all</span></div>
             <div class="viol-list" id="violList"><div class="evt-empty">No violations yet</div></div>
           </div>
+
+          <!-- Detection Limitations / Contingencies -->
+          <div class="rp-card">
+            <div class="rp-title" style="color:#EA580C">⚠ Detection Limitations</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:#FEF2F2;border-radius:8px;font-size:11px;border:1px solid #FECACA">
+                <span style="flex-shrink:0;margin-top:1px">📷</span>
+                <div><strong style="color:#991B1B">Camera Angle</strong><br><span style="color:#6B7280">Top/elevated camera angle may partially hide people or phones, affecting counting and phone detection accuracy.</span></div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:#FEF2F2;border-radius:8px;font-size:11px;border:1px solid #FECACA">
+                <span style="flex-shrink:0;margin-top:1px">👥</span>
+                <div><strong style="color:#991B1B">Person Overlap</strong><br><span style="color:#6B7280">When people walk closely together, individuals or phones may be partially blocked, causing missed detections.</span></div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:#FEF2F2;border-radius:8px;font-size:11px;border:1px solid #FECACA">
+                <span style="flex-shrink:0;margin-top:1px">📏</span>
+                <div><strong style="color:#991B1B">Distance from Camera</strong><br><span style="color:#6B7280">People far from the camera appear very small, reducing accuracy for both people counting and phone usage detection.</span></div>
+              </div>
+
+              <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:#FEF2F2;border-radius:8px;font-size:11px;border:1px solid #FECACA">
+                <span style="flex-shrink:0;margin-top:1px">📱</span>
+                <div><strong style="color:#991B1B">Phone Visibility</strong><br><span style="color:#6B7280">Phone usage can only be detected when the phone is clearly visible in hand. Hidden or partially covered phones may be missed.</span></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="footer">Powered by <img src="/static/thinkneuralai_logo.jpg" alt="TNai"> <strong>Thinkneuralai</strong></div>
     </div>
 
-    <!-- Other Pages -->
-    <div class="page" id="pg-reports"><div class="placeholder-page"><div class="ph-icon">◩</div><h2>Reports</h2><p>Historical analytics and daily reports</p></div></div>
+    <!-- Reports Page -->
+    <div class="page" id="pg-reports">
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;flex:1">
+        <!-- Page Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:18px;font-weight:700;color:#1E293B">📊 Daily Reports</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:2px">Summary of today's activity and violations</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="date" id="reportDate" style="padding:6px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:12px;color:#1E293B;background:#fff;font-family:Inter,sans-serif">
+            <button onclick="refreshReports()" style="padding:6px 16px;background:linear-gradient(135deg,#2563EB,#3B82F6);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px">Total IN</div>
+            <div id="rptIn" style="font-size:32px;font-weight:800;color:#2563EB;margin:6px 0">0</div>
+            <div style="font-size:10px;color:#9CA3AF">People entered</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px">Total OUT</div>
+            <div id="rptOut" style="font-size:32px;font-weight:800;color:#EF4444;margin:6px 0">0</div>
+            <div style="font-size:10px;color:#9CA3AF">People exited</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px">Currently Inside</div>
+            <div id="rptNet" style="font-size:32px;font-weight:800;color:#16A34A;margin:6px 0">0</div>
+            <div style="font-size:10px;color:#9CA3AF">Net occupancy</div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.5px">Phone Violations</div>
+            <div id="rptViolations" style="font-size:32px;font-weight:800;color:#EA580C;margin:6px 0">0</div>
+            <div style="font-size:10px;color:#9CA3AF">Detections today</div>
+          </div>
+        </div>
+
+        <!-- Charts Row: Historical Data -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#1E293B">📈 Hourly Traffic</div>
+              <div style="font-size:10px;color:#9CA3AF">Selected date</div>
+            </div>
+            <div style="position:relative;height:200px"><canvas id="rptHourlyChart"></canvas></div>
+          </div>
+          <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#1E293B">📱 Hourly Violations</div>
+              <div style="font-size:10px;color:#9CA3AF">Selected date</div>
+            </div>
+            <div style="position:relative;height:200px"><canvas id="rptViolChart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Weekly Chart -->
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:700;color:#1E293B">📊 Weekly Overview (Last 7 Days)</div>
+            <div style="font-size:10px;color:#9CA3AF">Daily totals</div>
+          </div>
+          <div style="position:relative;height:180px"><canvas id="rptWeeklyChart"></canvas></div>
+        </div>
+
+        <!-- People Count Summary Table -->
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:13px;font-weight:700;color:#1E293B">👥 People Count Summary</div>
+            <div style="font-size:10px;color:#9CA3AF">Auto-updated every 5 seconds</div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#F8FAFC">
+                <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Metric</th>
+                <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Count</th>
+                <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;color:#1E293B;font-weight:500">🔵 People Entered (IN)</td>
+                <td id="rptTblIn" style="padding:10px 12px;text-align:center;border-bottom:1px solid #F1F5F9;font-weight:700;color:#2563EB">0</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9"><span style="padding:2px 8px;border-radius:4px;background:#EFF6FF;color:#2563EB;font-size:10px;font-weight:600">Tracking</span></td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;color:#1E293B;font-weight:500">🔴 People Exited (OUT)</td>
+                <td id="rptTblOut" style="padding:10px 12px;text-align:center;border-bottom:1px solid #F1F5F9;font-weight:700;color:#EF4444">0</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9"><span style="padding:2px 8px;border-radius:4px;background:#FEF2F2;color:#EF4444;font-size:10px;font-weight:600">Tracking</span></td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;color:#1E293B;font-weight:500">🟢 Net Inside</td>
+                <td id="rptTblNet" style="padding:10px 12px;text-align:center;border-bottom:1px solid #F1F5F9;font-weight:700;color:#16A34A">0</td>
+                <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9"><span style="padding:2px 8px;border-radius:4px;background:#F0FDF4;color:#16A34A;font-size:10px;font-weight:600">Live</span></td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px;color:#1E293B;font-weight:500">🟠 In Frame (Current)</td>
+                <td id="rptTblHeads" style="padding:10px 12px;text-align:center;font-weight:700;color:#EA580C">0</td>
+                <td style="padding:10px 12px"><span style="padding:2px 8px;border-radius:4px;background:#FFF7ED;color:#EA580C;font-size:10px;font-weight:600">Real-time</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Violation Log Table -->
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:13px;font-weight:700;color:#1E293B">📱 Phone Violation Log</div>
+            <div id="rptViolCount" style="font-size:10px;color:#9CA3AF">0 violations recorded</div>
+          </div>
+          <div id="rptViolTable" style="max-height:300px;overflow-y:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead style="position:sticky;top:0;background:#F8FAFC;z-index:1">
+                <tr>
+                  <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">#</th>
+                  <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Timestamp</th>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Frame</th>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Evidence</th>
+                </tr>
+              </thead>
+              <tbody id="rptViolBody">
+                <tr><td colspan="4" style="padding:20px;text-align:center;color:#9CA3AF">No violations recorded yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align:center;padding:8px;font-size:10px;color:#9CA3AF">Report generated in real-time • Data resets on system restart</div>
+      </div>
+    </div>
     <div class="page" id="pg-insights"><div class="placeholder-page"><div class="ph-icon">◆</div><h2>Insights</h2><p>AI-powered trend analysis</p></div></div>
     <div class="page" id="pg-settings"><div class="placeholder-page"><div class="ph-icon">◎</div><h2>Settings</h2><p>System configuration</p></div></div>
   </div>

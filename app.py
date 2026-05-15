@@ -10,6 +10,8 @@ import os
 import json
 import threading
 import time
+import random
+from datetime import datetime, timedelta
 from pathlib import Path
 from inference import MobileOutDetector, CentroidTracker
 import numpy as np
@@ -71,6 +73,52 @@ def _init_db():
                 VALUES (1, 0, 0)
                 ON CONFLICT (id) DO NOTHING
             """)
+            # Hourly logs table for historical reports
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS hourly_logs (
+                    id SERIAL PRIMARY KEY,
+                    logged_at TIMESTAMP NOT NULL,
+                    hour INTEGER NOT NULL,
+                    in_count INTEGER NOT NULL DEFAULT 0,
+                    out_count INTEGER NOT NULL DEFAULT 0,
+                    violations INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_hourly_logs_date ON hourly_logs (logged_at)")
+            # Seed sample data for past 7 days if table is empty
+            cur.execute("SELECT COUNT(*) FROM hourly_logs")
+            if cur.fetchone()[0] == 0:
+                _seed_sample_data(cur)
+
+
+def _seed_sample_data(cur):
+    """Seed 7 days of realistic hourly data for demo purposes"""
+    now = datetime.now()
+    for day_offset in range(7, 0, -1):
+        day = now - timedelta(days=day_offset)
+        day_base = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Realistic hourly traffic pattern (busier 9AM-6PM)
+        hourly_pattern = {
+            0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 1, 6: 3, 7: 8,
+            8: 15, 9: 25, 10: 30, 11: 28, 12: 20, 13: 22, 14: 27,
+            15: 32, 16: 26, 17: 18, 18: 12, 19: 6, 20: 3, 21: 1, 22: 0, 23: 0
+        }
+        cumulative_in = 0
+        cumulative_out = 0
+        for hour in range(24):
+            base = hourly_pattern[hour]
+            # Add randomness
+            in_delta = max(0, base + random.randint(-3, 5))
+            out_delta = max(0, in_delta + random.randint(-4, 2))
+            cumulative_in += in_delta
+            cumulative_out += out_delta
+            violations = random.randint(0, 2) if 8 <= hour <= 18 and random.random() > 0.6 else 0
+            ts = day_base + timedelta(hours=hour)
+            cur.execute(
+                "INSERT INTO hourly_logs (logged_at, hour, in_count, out_count, violations) VALUES (%s, %s, %s, %s, %s)",
+                (ts, hour, cumulative_in, cumulative_out, violations)
+            )
+    print("  ✅ Seeded 7 days of sample report data")
 
 def _load_counts():
     try:
@@ -554,6 +602,111 @@ def get_violation_image(filename):
     return send_from_directory('violations', filename)
 
 
+@app.route('/api/reports/<date_str>')
+def get_daily_report(date_str):
+    """Get hourly report data for a given date (YYYY-MM-DD)"""
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    try:
+        with _get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT hour, in_count, out_count, violations
+                    FROM hourly_logs
+                    WHERE logged_at::date = %s
+                    ORDER BY hour
+                """, (target_date,))
+                rows = cur.fetchall()
+
+                # Build full 24-hour data (fill missing hours with 0)
+                hourly = {}
+                for r in rows:
+                    hourly[r['hour']] = r
+
+                result = []
+                for h in range(24):
+                    if h in hourly:
+                        result.append({
+                            'hour': h,
+                            'label': f"{h}:00",
+                            'in_count': hourly[h]['in_count'],
+                            'out_count': hourly[h]['out_count'],
+                            'violations': hourly[h]['violations']
+                        })
+                    else:
+                        result.append({'hour': h, 'label': f"{h}:00", 'in_count': 0, 'out_count': 0, 'violations': 0})
+
+                # Summary
+                total_in = max((r['in_count'] for r in rows), default=0) if rows else 0
+                total_out = max((r['out_count'] for r in rows), default=0) if rows else 0
+                total_viol = sum(r['violations'] for r in rows) if rows else 0
+
+                return jsonify({
+                    'date': date_str,
+                    'hourly': result,
+                    'summary': {
+                        'total_in': total_in,
+                        'total_out': total_out,
+                        'total_violations': total_viol,
+                        'peak_hour': max(result, key=lambda x: x['in_count'])['label'] if result else '--'
+                    }
+                })
+    except Exception as e:
+        print(f"⚠️ Report query error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/reports/week')
+def get_weekly_report():
+    """Get daily totals for the last 7 days"""
+    try:
+        with _get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT logged_at::date as day,
+                           MAX(in_count) as total_in,
+                           MAX(out_count) as total_out,
+                           SUM(violations) as total_violations
+                    FROM hourly_logs
+                    WHERE logged_at >= NOW() - INTERVAL '7 days'
+                    GROUP BY logged_at::date
+                    ORDER BY day
+                """)
+                rows = cur.fetchall()
+                result = []
+                for r in rows:
+                    result.append({
+                        'date': r['day'].strftime('%Y-%m-%d'),
+                        'day_name': r['day'].strftime('%a'),
+                        'total_in': r['total_in'],
+                        'total_out': r['total_out'],
+                        'total_violations': r['total_violations']
+                    })
+                return jsonify({'days': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _log_hourly_snapshot():
+    """Background task: log current counts to hourly_logs every 10 minutes"""
+    while True:
+        time.sleep(600)  # Every 10 minutes
+        try:
+            now = datetime.now()
+            with _get_db() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO hourly_logs (logged_at, hour, in_count, out_count, violations) VALUES (%s, %s, %s, %s, %s)",
+                        (now, now.hour, processing_stats.get('in_count', 0),
+                         processing_stats.get('out_count', 0), len(violations_list))
+                    )
+        except Exception as e:
+            print(f"⚠️ Hourly log error: {e}")
+
+
 def auto_start():
     """Auto-start video processing after server starts"""
     time.sleep(2)  # Wait for Flask to fully start
@@ -571,6 +724,10 @@ if __name__ == '__main__':
     print(f"🎬 Fallback: {TEST_VIDEO}")
     print(f"🤖 Model: {MODEL_PATH}")
     print("="*70 + "\n")
+    
+    # Start background hourly logger
+    log_thread = threading.Thread(target=_log_hourly_snapshot, daemon=True)
+    log_thread.start()
     
     # Auto-start processing in background
     auto_thread = threading.Thread(target=auto_start, daemon=True)
