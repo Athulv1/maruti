@@ -173,6 +173,82 @@ setInterval(async()=>{
 })();
 
 // Reports page
+
+// Excel Download helpers
+function saveExcel(wb, filename){
+  XLSX.writeFile(wb, filename);
+}
+
+function downloadDailyCSV(){
+  const dp=document.getElementById('reportDate');
+  const dateStr=dp?dp.value:new Date().toISOString().split('T')[0];
+  fetch('/api/reports/'+dateStr).then(r=>r.json()).then(d=>{
+    if(d.error){alert('No data available for '+dateStr);return;}
+    const wb=XLSX.utils.book_new();
+    // Hourly sheet
+    const hourlyRows=[['Hour','IN Count','OUT Count','Net Inside','Violations']];
+    if(d.hourly){
+      d.hourly.forEach(h=>{
+        hourlyRows.push([h.label, h.in_count, h.out_count, Math.max(h.in_count-h.out_count,0), h.violations]);
+      });
+    }
+    const ws1=XLSX.utils.aoa_to_sheet(hourlyRows);
+    ws1['!cols']=[{wch:8},{wch:12},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Hourly Breakdown');
+    // Summary sheet
+    const summaryRows=[
+      ['Metric','Value'],
+      ['Date', dateStr],
+      ['Total IN', d.summary.total_in],
+      ['Total OUT', d.summary.total_out],
+      ['Net Inside', Math.max(d.summary.total_in-d.summary.total_out,0)],
+      ['Total Violations', d.summary.total_violations],
+      ['Peak Hour', d.summary.peak_hour]
+    ];
+    const ws2=XLSX.utils.aoa_to_sheet(summaryRows);
+    ws2['!cols']=[{wch:18},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+    saveExcel(wb, `Daily_Report_${dateStr}.xlsx`);
+  }).catch(()=>alert('Failed to fetch report data'));
+}
+
+function downloadWeeklyCSV(){
+  fetch('/api/reports/week').then(r=>r.json()).then(d=>{
+    if(!d.days||d.days.length===0){alert('No weekly data available');return;}
+    const wb=XLSX.utils.book_new();
+    const rows=[['Date','Day','Total IN','Total OUT','Net Inside','Violations']];
+    let sumIn=0,sumOut=0,sumViol=0;
+    d.days.forEach(day=>{
+      const net=Math.max(day.total_in-day.total_out,0);
+      rows.push([day.date, day.day_name, day.total_in, day.total_out, net, day.total_violations]);
+      sumIn+=day.total_in; sumOut+=day.total_out; sumViol+=day.total_violations;
+    });
+    rows.push([]);
+    rows.push(['Total','',sumIn,sumOut,Math.max(sumIn-sumOut,0),sumViol]);
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:6},{wch:12},{wch:12},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Weekly Report');
+    saveExcel(wb, `Weekly_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }).catch(()=>alert('Failed to fetch weekly data'));
+}
+
+function downloadViolationsCSV(){
+  fetch('/violations').then(r=>r.json()).then(d=>{
+    if(!d.violations||d.violations.length===0){alert('No violations recorded');return;}
+    const wb=XLSX.utils.book_new();
+    const rows=[['#','Timestamp','Frame Number','Screenshot File']];
+    d.violations.forEach((v,i)=>{
+      rows.push([i+1, v.timestamp||'--', v.frame_number||'--', v.filename||'--']);
+    });
+    rows.push([]);
+    rows.push(['Total Violations', d.violations.length]);
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:5},{wch:22},{wch:14},{wch:35}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Violations');
+    saveExcel(wb, `Violations_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }).catch(()=>alert('Failed to fetch violations'));
+}
+
 let rptHourlyChart=null, rptViolChart=null, rptWeeklyChart=null;
 
 const chartFont={family:'Inter',size:10};
