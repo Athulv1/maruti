@@ -1,3 +1,21 @@
+// Reset counts
+function resetCounts() {
+  if (!confirm('Reset IN and OUT counts to zero?')) return;
+  fetch('/reset_counts', { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const inEl = document.getElementById('tsIn');
+        const outEl = document.getElementById('tsOut');
+        if (inEl) inEl.textContent = '0';
+        if (outEl) outEl.textContent = '0';
+      } else {
+        alert('Reset failed: ' + (data.message || 'Unknown error'));
+      }
+    })
+    .catch(() => alert('Reset request failed'));
+}
+
 // Navigation
 document.querySelectorAll('.nav-btn').forEach(b=>{
   b.addEventListener('click',()=>{

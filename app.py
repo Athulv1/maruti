@@ -166,10 +166,31 @@ processing_stats = {
     'in_count': _saved_in,
     'out_count': _saved_out,
     'fps': 0,
-    'status': 'idle'
+    'status': 'idle',
+    'reset_requested': False,
 }
 violations_list = []  # Store mobile violation screenshots
 frame_lock = threading.Lock()
+
+
+def _midnight_reset_scheduler():
+    """Background thread: triggers a count reset every day at midnight."""
+    import datetime
+    while True:
+        now = datetime.datetime.now()
+        next_midnight = (now + datetime.timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sleep_seconds = (next_midnight - now).total_seconds()
+        time.sleep(sleep_seconds)
+        processing_stats['reset_requested'] = True
+        processing_stats['in_count'] = 0
+        processing_stats['out_count'] = 0
+        _save_counts(0, 0)
+        print("  🕛 Midnight auto-reset triggered")
+
+
+threading.Thread(target=_midnight_reset_scheduler, daemon=True).start()
 
 
 def allowed_file(filename):
@@ -247,10 +268,13 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
 
         def line_side(cx, cy):
             """Which side of the tilted line is the point on? Uses cross product.
-            Returns 'upper' or 'lower' relative to the line direction."""
-            dx = line_p2[0] - line_p1[0]
-            dy = line_p2[1] - line_p1[1]
-            cross = dx * (cy - line_p1[1]) - dy * (cx - line_p1[0])
+            Returns 'upper' or 'lower' relative to the physical frame (upper = smaller y)."""
+            # Normalize direction left-to-right so cross product sign is consistent
+            # regardless of which endpoint was stored as p1 vs p2
+            p1, p2 = (line_p1, line_p2) if line_p1[0] <= line_p2[0] else (line_p2, line_p1)
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            cross = dx * (cy - p1[1]) - dy * (cx - p1[0])
             return 'upper' if cross < 0 else 'lower'
 
         def is_in_roi(cx, cy):
@@ -394,24 +418,33 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                 # Count when crossing the line
                 if object_id not in counted_ids and prev_side != current_side:
                     if prev_side == 'upper' and current_side == 'lower':
-                        out_count += 1
-                        counted_ids.add(object_id)
-                        _save_counts(in_count, out_count)
-                        print(f"  ✅ OUT+1: ID {object_id} crossed line at ({cx},{cy})")
-                    elif prev_side == 'lower' and current_side == 'upper':
                         in_count += 1
                         counted_ids.add(object_id)
                         _save_counts(in_count, out_count)
                         print(f"  ✅ IN+1: ID {object_id} crossed line at ({cx},{cy})")
-                
+                    elif prev_side == 'lower' and current_side == 'upper':
+                        out_count += 1
+                        counted_ids.add(object_id)
+                        _save_counts(in_count, out_count)
+                        print(f"  ✅ OUT+1: ID {object_id} crossed line at ({cx},{cy})")
+
                 person_sides[object_id] = current_side
-            
+
             # Clean up
             active_ids = set(objects.keys())
             for old_id in list(person_sides.keys()):
                 if old_id not in active_ids:
                     del person_sides[old_id]
-            
+
+            # Handle reset request from UI or midnight scheduler
+            if processing_stats.get('reset_requested'):
+                in_count = 0
+                out_count = 0
+                counted_ids = set()
+                person_sides = {}
+                _save_counts(0, 0)
+                processing_stats['reset_requested'] = False
+
             processing_stats['in_count'] = in_count
             processing_stats['out_count'] = out_count
             processing_stats['current_heads'] = len(objects)
@@ -575,9 +608,10 @@ def stop_processing():
 @app.route('/reset_counts', methods=['POST'])
 def reset_counts():
     """Reset IN/OUT counts to zero in DB and memory"""
-    _save_counts(0, 0)
+    processing_stats['reset_requested'] = True
     processing_stats['in_count'] = 0
     processing_stats['out_count'] = 0
+    _save_counts(0, 0)
     return jsonify({'success': True, 'message': 'Counts reset to 0'})
 
 
