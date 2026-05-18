@@ -176,10 +176,17 @@ setInterval(async()=>{
 
 // Excel Download helpers
 function saveExcel(wb, filename){
+  if(typeof XLSX==='undefined'){alert('Excel library not loaded. Please refresh the page and try again.');return;}
   XLSX.writeFile(wb, filename);
 }
 
+function checkXLSX(){
+  if(typeof XLSX==='undefined'){alert('Excel library not loaded. Please refresh the page and try again.');return false;}
+  return true;
+}
+
 function downloadDailyCSV(){
+  if(!checkXLSX())return;
   const dp=document.getElementById('reportDate');
   const dateStr=dp?dp.value:new Date().toISOString().split('T')[0];
   fetch('/api/reports/'+dateStr).then(r=>r.json()).then(d=>{
@@ -213,6 +220,7 @@ function downloadDailyCSV(){
 }
 
 function downloadWeeklyCSV(){
+  if(!checkXLSX())return;
   fetch('/api/reports/week').then(r=>r.json()).then(d=>{
     if(!d.days||d.days.length===0){alert('No weekly data available');return;}
     const wb=XLSX.utils.book_new();
@@ -233,6 +241,7 @@ function downloadWeeklyCSV(){
 }
 
 function downloadViolationsCSV(){
+  if(!checkXLSX())return;
   fetch('/violations').then(r=>r.json()).then(d=>{
     if(!d.violations||d.violations.length===0){alert('No violations recorded');return;}
     const wb=XLSX.utils.book_new();
