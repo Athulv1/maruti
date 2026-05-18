@@ -212,18 +212,8 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
     MOBILE_FRAME_THRESHOLD = 2  # Minimum frames needed to trigger alert
     
     try:
-        # Initialize detector (for people counting)
+        # Initialize detector
         detector = MobileOutDetector(model_path, conf_threshold=conf_threshold)
-        
-        # Initialize phone detection model (specialized)
-        from ultralytics import YOLO
-        import torch
-        phone_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        phone_model = YOLO(PHONE_MODEL_PATH)
-        phone_model.to(phone_device)
-        print(f"📱 Phone detection model loaded: {PHONE_MODEL_PATH} on {phone_device}")
-        PHONE_DETECT_EVERY = 3  # Run phone model every 3rd frame
-        last_phone_result = False  # Last phone detection state
         
         # Open video
         cap = cv2.VideoCapture(str(video_path))
@@ -353,15 +343,19 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
             else:
                 results = last_results
             
-            # Collect detections from counting model (best.pt) — for people tracking only
+            # Collect detections
             detections_for_tracking = []
+            mobile_detected_this_frame = False
 
             for box in results.boxes:
                 class_id = int(box.cls[0])
                 class_name = detector.model.names.get(class_id, f'class_{class_id}')
 
-                # Track ALL persons for counting (both with and without phone)
-                if class_name in ('person', 'person_without_phone', 'person_with_phone'):
+                if class_name == 'person_with_phone':
+                    mobile_detected_this_frame = True
+                    bbox = box.xyxy[0].cpu().numpy()
+                    detections_for_tracking.append(bbox)
+                elif class_name in ('person', 'person_without_phone'):
                     bbox = box.xyxy[0].cpu().numpy()
                     detections_for_tracking.append(bbox)
 
@@ -371,24 +365,8 @@ def process_video_live(video_path, model_path, roi_config_file=None, conf_thresh
                     [x1 / infer_scale, y1 / infer_scale, x2 / infer_scale, y2 / infer_scale]
                     for x1, y1, x2, y2 in detections_for_tracking
                 ]
-
-            # --- Phone detection using specialized model (best_m.pt) ---
-            mobile_detected_this_frame = False
-            if frame_count % PHONE_DETECT_EVERY == 0:
-                phone_results = phone_model(
-                    small,
-                    conf=0.25,
-                    iou=0.45,
-                    verbose=False,
-                    imgsz=INFER_WIDTH,
-                    device=phone_device
-                )[0]
-                last_phone_result = len(phone_results.boxes) > 0
-                mobile_detected_this_frame = last_phone_result
-            else:
-                mobile_detected_this_frame = last_phone_result
             
-            # Mobile violation tracking (using phone model results)
+            # Mobile violation tracking
             if mobile_detected_this_frame:
                 mobile_detection_frames += 1
             else:
