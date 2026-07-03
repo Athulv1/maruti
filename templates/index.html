@@ -135,6 +135,7 @@
             <button onclick="downloadDailyCSV()" style="padding:6px 14px;background:#fff;color:#1E293B;border:1px solid #E5E7EB;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">📥 Daily Report</button>
             <button onclick="downloadWeeklyCSV()" style="padding:6px 14px;background:#fff;color:#1E293B;border:1px solid #E5E7EB;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">📥 Weekly Report</button>
             <button onclick="downloadViolationsCSV()" style="padding:6px 14px;background:#fff;color:#EA580C;border:1px solid #FECACA;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='#FEF2F2'" onmouseout="this.style.background='#fff'">📥 Violations</button>
+            <button onclick="openClientReport()" style="padding:6px 14px;background:linear-gradient(135deg,#7C3AED,#9333EA);color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">📄 Client Report</button>
           </div>
         </div>
 
@@ -241,7 +242,8 @@
                   <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">#</th>
                   <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Timestamp</th>
                   <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Frame</th>
-                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Evidence</th>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Snapshots</th>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Action</th>
                 </tr>
               </thead>
               <tbody id="rptViolBody">
@@ -256,7 +258,45 @@
       </div>
     </div>
     <div class="page" id="pg-insights"><div class="placeholder-page"><div class="ph-icon">◆</div><h2>Insights</h2><p>AI-powered trend analysis</p></div></div>
-    <div class="page" id="pg-settings"><div class="placeholder-page"><div class="ph-icon">◎</div><h2>Settings</h2><p>System configuration</p></div></div>
+    <div class="page" id="pg-settings">
+      <div style="padding:24px;max-width:960px">
+        <div style="font-size:15px;font-weight:800;color:#1E293B;margin-bottom:6px">ROI &amp; Counting Line Setup</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-bottom:18px">Click on the frame to place points. Complete steps 1–3 (counting), then optionally draw a Phone Detection Zone (step 4) to restrict phone violation detection to that area.</div>
+
+        <!-- Step indicator + controls -->
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+          <div id="roiStepLabel" style="font-size:12px;font-weight:600;color:#2563EB;background:#EFF6FF;padding:7px 14px;border-radius:8px;border:1px solid #BFDBFE;min-width:280px">
+            Step 1: Draw Upper Zone — click 4 points
+          </div>
+          <button onclick="loadRoiFrame()" style="padding:7px 14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;font-size:11px;font-weight:600;color:#6B7280;cursor:pointer">↺ Refresh Frame</button>
+          <button onclick="roiUndo()" style="padding:7px 14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:8px;font-size:11px;font-weight:600;color:#6B7280;cursor:pointer">↩ Undo</button>
+          <button onclick="roiClear()" style="padding:7px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:11px;font-weight:600;color:#EF4444;cursor:pointer">✕ Clear All</button>
+          <button onclick="roiSave()" id="roiSaveBtn" style="padding:7px 16px;background:#16A34A;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;opacity:0.4;pointer-events:none">✓ Save &amp; Apply</button>
+        </div>
+
+        <!-- Step pills -->
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <div id="roiPill0" style="padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;background:#DCFCE7;color:#16A34A;border:1px solid #BBF7D0">① Upper Zone</div>
+          <div id="roiPill1" style="padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0">② Lower Zone</div>
+          <div id="roiPill2" style="padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0">③ Counting Line</div>
+          <div id="roiPill3" style="padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;background:#F1F5F9;color:#94A3B8;border:1px solid #E2E8F0">④ Phone Zone (optional)</div>
+        </div>
+
+        <!-- Canvas wrapper -->
+        <div style="position:relative;display:inline-block;border:2px solid #E5E7EB;border-radius:10px;overflow:hidden;line-height:0">
+          <img id="roiImg" src="" alt="Camera frame" style="display:block;max-width:860px;min-width:400px;min-height:200px;background:#1E293B">
+          <canvas id="roiCanvas" style="position:absolute;top:0;left:0;cursor:crosshair"></canvas>
+        </div>
+
+        <!-- Legend -->
+        <div style="display:flex;gap:18px;margin-top:10px;font-size:11px;color:#6B7280">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:rgba(34,197,94,0.3);border:2px solid #22C55E;display:inline-block;border-radius:2px"></span>Upper Zone (IN side)</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:rgba(59,130,246,0.3);border:2px solid #3B82F6;display:inline-block;border-radius:2px"></span>Lower Zone (OUT side)</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#EF4444;display:inline-block"></span>Counting Line</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:14px;background:rgba(234,88,12,0.3);border:2px solid #EA580C;display:inline-block;border-radius:2px"></span>Phone Detection Zone</span>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="/static/dashboard.js"></script>

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SakshiAI — Client Report {{ date }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #F1F5F9; color: #1E293B; }
+
+    .print-bar {
+      width: 210mm; margin: 20px auto 12px;
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+    .print-btn {
+      padding: 8px 22px; background: #2563EB; color: #fff;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .print-btn:hover { background: #1D4ED8; }
+
+    .page {
+      width: 210mm; min-height: 297mm;
+      margin: 0 auto 40px; background: #fff;
+      padding: 28px 32px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.10);
+    }
+
+    /* ── Header ── */
+    .rpt-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 16px; border-bottom: 2px solid #E5E7EB; margin-bottom: 22px;
+    }
+    .rpt-header-left { display: flex; align-items: center; gap: 14px; }
+    .rpt-header-left img.logo-maruti { height: 38px; }
+    .rpt-header-left img.logo-sakshi { height: 28px; }
+    .rpt-header-title { font-size: 17px; font-weight: 800; color: #1E293B; }
+    .rpt-header-sub { font-size: 10px; color: #9CA3AF; margin-top: 2px; }
+    .rpt-header-right { text-align: right; }
+    .rpt-date { font-size: 14px; font-weight: 700; color: #2563EB; }
+    .rpt-gen { font-size: 10px; color: #9CA3AF; margin-top: 3px; }
+
+    /* ── Summary cards ── */
+    .cards {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin-bottom: 22px;
+    }
+    .card {
+      background: #F8FAFC; border-radius: 10px;
+      padding: 14px 10px; border: 1px solid #E5E7EB; text-align: center;
+    }
+    .card-label { font-size: 9px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: .6px; }
+    .card-val { font-size: 30px; font-weight: 800; margin: 6px 0 4px; }
+    .card-sub { font-size: 10px; color: #9CA3AF; }
+    .blue  { color: #2563EB; }
+    .red   { color: #EF4444; }
+    .green { color: #16A34A; }
+    .orange{ color: #EA580C; }
+
+    /* ── Section ── */
+    .section { margin-bottom: 22px; }
+    .section-title {
+      font-size: 12px; font-weight: 700; color: #1E293B;
+      margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #E5E7EB;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* ── Chart ── */
+    .chart-wrap { height: 175px; position: relative; }
+
+    /* ── Violations grid ── */
+    .viol-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .viol-card { border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; }
+    .viol-img { width: 100%; height: 160px; object-fit: cover; display: block; background: #F1F5F9; }
+    .viol-info { padding: 7px 10px; background: #FFF7ED; border-top: 1px solid #FECACA; text-align: center; }
+    .viol-badge {
+      display: inline-block;
+      padding: 2px 8px; background: #FEF2F2; color: #EA580C;
+      border-radius: 4px; font-size: 10px; font-weight: 700;
+    }
+    .viol-more {
+      margin-top: 10px; padding: 9px 14px;
+      background: #F8FAFC; border: 1px solid #E5E7EB; border-radius: 8px;
+      font-size: 11px; color: #6B7280; font-style: italic;
+    }
+    .no-viol {
+      text-align: center; padding: 24px; color: #9CA3AF;
+      font-size: 12px; background: #F8FAFC;
+      border-radius: 8px; border: 1px solid #E5E7EB;
+    }
+
+    /* ── Hourly table ── */
+    .hour-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .hour-table th {
+      padding: 7px 10px; background: #F8FAFC;
+      border-bottom: 2px solid #E5E7EB; color: #6B7280;
+      font-weight: 600; text-align: center;
+    }
+    .hour-table td { padding: 6px 10px; border-bottom: 1px solid #F1F5F9; text-align: center; color: #1E293B; }
+    .hour-table tr:last-child td { border-bottom: none; }
+
+    /* ── Footer ── */
+    .rpt-footer {
+      margin-top: 28px; padding-top: 12px; border-top: 1px solid #E5E7EB;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .rpt-footer-left { font-size: 9px; color: #9CA3AF; }
+    .rpt-footer-right { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #9CA3AF; }
+    .rpt-footer-right img { height: 16px; }
+
+    @media print {
+      body { background: #fff; }
+      .print-bar { display: none !important; }
+      .page { margin: 0; box-shadow: none; width: 100%; min-height: unset; padding: 18px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="print-bar">
+  <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="rpt-header">
+    <div class="rpt-header-left">
+      <img class="logo-maruti" src="/static/Maruti.png" alt="Maruti">
+      <img class="logo-sakshi" src="/static/Sakshi.png" alt="SakshiAI">
+      <div>
+        <div class="rpt-header-title">Daily Monitoring Report</div>
+        <div class="rpt-header-sub">SakshiAI Intelligent Security &amp; People Counting System</div>
+      </div>
+    </div>
+    <div class="rpt-header-right">
+      <div class="rpt-date">📅 {{ date }}</div>
+      <div class="rpt-gen">Generated: {{ generated_at }}</div>
+    </div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="cards" style="grid-template-columns:repeat(3,1fr)">
+    <div class="card">
+      <div class="card-label">Total IN</div>
+      <div class="card-val blue">{{ total_in }}</div>
+      <div class="card-sub">People entered</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total OUT</div>
+      <div class="card-val red">{{ total_out }}</div>
+      <div class="card-sub">People exited</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Phone Usage Violations</div>
+      <div class="card-val orange">{{ total_viol }}</div>
+      <div class="card-sub">Detections today</div>
+    </div>
+  </div>
+
+  <!-- Hourly Traffic Chart -->
+  <div class="section">
+    <div class="section-title">📈 Hourly Traffic</div>
+    <div class="chart-wrap">
+      <canvas id="hourlyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Phone Violation Evidence -->
+  <div class="section">
+    <div class="section-title">📱 Phone Usage Violation — Sample Evidence</div>
+    {% if violations %}
+    <div class="viol-grid">
+      {% for v in violations[:2] %}
+      <div class="viol-card">
+        <img class="viol-img" src="/violations/{{ v.filename }}" alt="Sample violation {{ loop.index }}">
+        <div class="viol-info">
+          <span class="viol-badge">📱 Phone Usage Detected</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if violations|length > 2 %}
+    <div class="viol-more">
+      📊 {{ violations|length - 2 }} more violation{{ 's' if violations|length - 2 > 1 else '' }} recorded for this date.
+      Full evidence with timestamps can be viewed on the SakshiAI live dashboard.
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="no-viol">No phone violations recorded for this date</div>
+    {% endif %}
+  </div>
+
+  <!-- Hourly Breakdown Table -->
+  <div class="section">
+    <div class="section-title">🕐 Hourly Breakdown</div>
+    <table class="hour-table">
+      <thead>
+        <tr>
+          <th>Hour</th>
+          <th>People IN</th>
+          <th>People OUT</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in hourly %}
+        <tr>
+          <td>{{ h.label }}</td>
+          <td style="color:#2563EB;font-weight:600">{{ h.in_count }}</td>
+          <td style="color:#EF4444;font-weight:600">{{ h.out_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div class="rpt-footer">
+    <div class="rpt-footer-left">Confidential — For Client Use Only &nbsp;|&nbsp; CAM 01 › Entrance</div>
+    <div class="rpt-footer-right">
+      Powered by
+      <img src="/static/thinkneuralai_logo.jpg" alt="TNai">
+      <strong>Thinkneuralai</strong>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const hourlyData = {{ hourly_json | safe }};
+new Chart(document.getElementById('hourlyChart'), {
+  type: 'line',
+  data: {
+    labels: hourlyData.map(h => h.label),
+    datasets: [
+      {
+        label: 'IN (Cumulative)', data: hourlyData.map(h => h.in_count),
+        borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,0.08)',
+        fill: true, tension: .4, pointRadius: 2, borderWidth: 2
+      },
+      {
+        label: 'OUT (Cumulative)', data: hourlyData.map(h => h.out_count),
+        borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.08)',
+        fill: true, tension: .4, pointRadius: 2, borderWidth: 2
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 0 },
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 9 }, padding: 10, usePointStyle: true } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#9CA3AF' } },
+      y: { beginAtZero: true, grid: { color: '#F1F5F9' }, ticks: { font: { size: 9 }, color: '#9CA3AF' } }
+    }
+  }
+});
+</script>
+</body>
+</html>
