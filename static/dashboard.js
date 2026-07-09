@@ -1,27 +1,86 @@
 // Returns today's date as YYYY-MM-DD in local timezone (not UTC)
 function localToday(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 
-// Delete a violation
-function deleteViolation(filename) {
-  if (!confirm('Delete this violation image?')) return;
-  fetch('/violations/' + filename, { method: 'DELETE' })
-    .then(r => r.json())
-    .then(d => {
-      if (d.success) {
-        // Remove from live panel
-        const liveEl = document.getElementById('vi-' + filename);
-        if (liveEl) liveEl.remove();
-        // Remove from reports table
-        const rowEl = document.getElementById('vrow-' + filename);
-        if (rowEl) rowEl.remove();
-        // Refresh both live counts and reports summary immediately
-        refreshViolationCounts();
-        refreshReports();
-      } else {
-        alert('Delete failed: ' + (d.error || 'Unknown error'));
-      }
-    })
-    .catch(() => alert('Delete request failed'));
+// ─── Violation Delete ─────────────────────────────────────────────────────────
+const _pendingDelete = {};
+let _selectedViolations = new Set(); // persist selections across table re-renders
+
+function deleteViolation(filename, btn) {
+  if (_pendingDelete[filename]) {
+    // Second click — confirmed
+    clearTimeout(_pendingDelete[filename].timer);
+    delete _pendingDelete[filename];
+    _doDeleteViolations([filename]);
+  } else {
+    // First click — arm the button
+    const origText = btn.textContent;
+    const origBg   = btn.style.background || '';
+    const origCol  = btn.style.color || '';
+    btn.textContent = 'Sure?';
+    btn.style.background = '#DC2626';
+    btn.style.color = '#fff';
+    _pendingDelete[filename] = {
+      timer: setTimeout(() => {
+        btn.textContent = origText;
+        btn.style.background = origBg;
+        btn.style.color = origCol;
+        delete _pendingDelete[filename];
+      }, 3000)
+    };
+  }
+}
+
+function _doDeleteViolations(filenames) {
+  Promise.all(filenames.map(f =>
+    fetch('/violations/' + encodeURIComponent(f), { method: 'DELETE' })
+      .then(r => r.json()).then(d => d.success ? f : null).catch(() => null)
+  )).then(done => {
+    done.filter(Boolean).forEach(f => {
+      _selectedViolations.delete(f);
+      const el = document.getElementById('vi-' + f); if (el) el.remove();
+      const rw = document.getElementById('vrow-' + f); if (rw) rw.remove();
+    });
+    refreshViolationCounts();
+    refreshReports();
+    _updateSelectToolbar();
+  });
+}
+
+function deleteSelectedViolations() {
+  const filenames = [..._selectedViolations];
+  if (!filenames.length) return;
+  _doDeleteViolations(filenames);
+}
+
+function _onViolCheckbox(cb) {
+  if (cb.checked) _selectedViolations.add(cb.dataset.filename);
+  else            _selectedViolations.delete(cb.dataset.filename);
+  _updateSelectToolbar();
+}
+
+function _toggleSelectAll(masterCb) {
+  document.querySelectorAll('.viol-cb').forEach(cb => {
+    cb.checked = masterCb.checked;
+    if (masterCb.checked) _selectedViolations.add(cb.dataset.filename);
+    else                  _selectedViolations.delete(cb.dataset.filename);
+  });
+  _updateSelectToolbar();
+}
+
+function _updateSelectToolbar() {
+  const n = _selectedViolations.size;
+  const total = document.querySelectorAll('.viol-cb').length;
+  const toolbar = document.getElementById('violSelectToolbar');
+  const masterCb = document.getElementById('violSelectAll');
+  if (toolbar) {
+    toolbar.style.display = n > 0 ? 'flex' : 'none';
+    const lbl = document.getElementById('violSelectedCount');
+    if (lbl) lbl.textContent = n + ' selected';
+  }
+  if (masterCb) {
+    masterCb.indeterminate = n > 0 && n < total;
+    masterCb.checked = total > 0 && n === total;
+  }
 }
 
 function refreshViolationCounts() {
@@ -35,22 +94,32 @@ function refreshViolationCounts() {
   }).catch(() => {});
 }
 
-// Reset counts
+// Reset counts — two-click confirmation (no browser dialog)
+let _resetArmed = false, _resetTimer = null;
 function resetCounts() {
-  if (!confirm('Reset IN and OUT counts to zero?')) return;
-  fetch('/reset_counts', { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.success) {
-        const inEl = document.getElementById('tsIn');
-        const outEl = document.getElementById('tsOut');
-        if (inEl) inEl.textContent = '0';
-        if (outEl) outEl.textContent = '0';
-      } else {
-        alert('Reset failed: ' + (data.message || 'Unknown error'));
-      }
-    })
-    .catch(() => alert('Reset request failed'));
+  const btn = document.getElementById('resetCountsBtn');
+  if (_resetArmed) {
+    clearTimeout(_resetTimer); _resetArmed = false;
+    if (btn) { btn.textContent = '↺ Reset Counts'; btn.style.background = ''; btn.style.color = ''; }
+    fetch('/reset_counts', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          const inEl = document.getElementById('tsIn');
+          const outEl = document.getElementById('tsOut');
+          if (inEl) inEl.textContent = '0';
+          if (outEl) outEl.textContent = '0';
+        }
+      })
+      .catch(() => {});
+  } else {
+    _resetArmed = true;
+    if (btn) { btn.textContent = 'Sure? Click again'; btn.style.background = '#DC2626'; btn.style.color = '#fff'; }
+    _resetTimer = setTimeout(() => {
+      _resetArmed = false;
+      if (btn) { btn.textContent = '↺ Reset Counts'; btn.style.background = ''; btn.style.color = ''; }
+    }, 3000);
+  }
 }
 
 // Navigation
@@ -210,7 +279,7 @@ setInterval(async()=>{
           <span class="vi-time">${v.timestamp||'--'}</span>
           <span class="vi-text">Phone detected</span>
           ${v.filename?`<img class="vi-thumb" src="/violations/${v.filename}" onclick="window.open('/violations/${v.filename}','_blank')" style="cursor:pointer">`:'' }
-          ${v.filename?`<button onclick="deleteViolation('${v.filename}')" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#EF4444;font-size:14px;padding:2px 4px;flex-shrink:0" title="Delete">✕</button>`:''}
+          ${v.filename?`<button onclick="deleteViolation('${v.filename}',this)" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#EF4444;font-size:14px;padding:2px 4px;flex-shrink:0" title="Delete">✕</button>`:''}
         </div>`
       ).join('');
     }
@@ -437,13 +506,18 @@ function refreshReports(){
   fetch('/violations?date='+dateStr).then(r=>r.json()).then(d=>{
     const total=d.total||0;
     const rc=document.getElementById('rptViolCount');if(rc)rc.textContent=total+' violations recorded';
-    // Override DB value with actual file count so it's always accurate
     const rv=document.getElementById('rptViolations');if(rv)rv.textContent=total;
     const body=document.getElementById('rptViolBody');
     if(body){
       if(d.violations&&d.violations.length>0){
         body.innerHTML=d.violations.map((v,i)=>
           `<tr id="vrow-${v.filename}">
+            <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;text-align:center">
+              <input type="checkbox" class="viol-cb" data-filename="${v.filename}"
+                ${_selectedViolations.has(v.filename)?'checked':''}
+                onchange="_onViolCheckbox(this)"
+                style="width:14px;height:14px;cursor:pointer;accent-color:#EF4444">
+            </td>
             <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;color:#6B7280">${i+1}</td>
             <td style="padding:8px 12px;border-bottom:1px solid #F1F5F9;color:#1E293B;font-weight:500">${v.timestamp||'--'}</td>
             <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #F1F5F9;color:#6B7280">${v.frame_number||'--'}</td>
@@ -452,12 +526,15 @@ function refreshReports(){
               ${v.gif?`<a href="/violations/${v.gif}" target="_blank" style="margin-left:6px;font-size:10px;font-weight:600;color:#7C3AED;background:#F3E8FF;padding:2px 7px;border-radius:4px;border:1px solid #DDD6FE;text-decoration:none">GIF</a>`:''}
             </td>
             <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #F1F5F9">
-              ${v.filename?`<button onclick="deleteViolation('${v.filename}')" style="background:#FEF2F2;border:1px solid #FECACA;color:#EF4444;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer" onmouseover="this.style.background='#FEE2E2'" onmouseout="this.style.background='#FEF2F2'">Delete</button>`:''}
+              ${v.filename?`<button onclick="deleteViolation('${v.filename}',this)" style="background:#FEF2F2;border:1px solid #FECACA;color:#EF4444;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer" onmouseover="this.style.background='#FEE2E2'" onmouseout="this.style.background='#FEF2F2'">Delete</button>`:''}
             </td>
           </tr>`
         ).join('');
+        _updateSelectToolbar();
       } else {
-        body.innerHTML='<tr><td colspan="4" style="padding:20px;text-align:center;color:#9CA3AF">No violations recorded yet</td></tr>';
+        body.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#9CA3AF">No violations recorded yet</td></tr>';
+        _selectedViolations.clear();
+        _updateSelectToolbar();
       }
     }
   }).catch(()=>{});

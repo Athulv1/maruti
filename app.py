@@ -275,7 +275,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 
-def process_video_live(video_path, model_path, roi_config_file=None, conf_threshold=0.15):
+def process_video_live(video_path, model_path, roi_config_file=None, conf_threshold=0.8):
     """Process video and generate frames for live streaming"""
     global current_frame, processing_active, processing_stats
     

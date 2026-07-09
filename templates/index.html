@@ -231,23 +231,32 @@
 
         <!-- Violation Log Table -->
         <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #E5E7EB">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div style="font-size:13px;font-weight:700;color:#1E293B">📱 Phone Violation Log</div>
             <div id="rptViolCount" style="font-size:10px;color:#9CA3AF">0 violations recorded</div>
+          </div>
+          <!-- Bulk-delete toolbar — hidden until items are selected -->
+          <div id="violSelectToolbar" style="display:none;align-items:center;gap:10px;margin-bottom:8px;padding:8px 12px;background:#FEF2F2;border-radius:8px;border:1px solid #FECACA">
+            <span id="violSelectedCount" style="font-size:12px;font-weight:600;color:#EF4444">0 selected</span>
+            <button onclick="deleteSelectedViolations()" style="padding:5px 14px;background:#EF4444;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Delete Selected</button>
+            <button onclick="_selectedViolations.clear();refreshReports();" style="padding:5px 10px;background:#fff;color:#6B7280;border:1px solid #E5E7EB;border-radius:6px;font-size:12px;cursor:pointer">Clear</button>
           </div>
           <div id="rptViolTable" style="max-height:300px;overflow-y:auto">
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead style="position:sticky;top:0;background:#F8FAFC;z-index:1">
                 <tr>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB;width:36px">
+                    <input type="checkbox" id="violSelectAll" onchange="_toggleSelectAll(this)" style="width:14px;height:14px;cursor:pointer;accent-color:#EF4444">
+                  </th>
                   <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">#</th>
                   <th style="padding:10px 12px;text-align:left;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Timestamp</th>
                   <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Frame</th>
-                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Snapshots</th>
+                  <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Snapshot</th>
                   <th style="padding:10px 12px;text-align:center;color:#6B7280;font-weight:600;border-bottom:2px solid #E5E7EB">Action</th>
                 </tr>
               </thead>
               <tbody id="rptViolBody">
-                <tr><td colspan="4" style="padding:20px;text-align:center;color:#9CA3AF">No violations recorded yet</td></tr>
+                <tr><td colspan="6" style="padding:20px;text-align:center;color:#9CA3AF">No violations recorded yet</td></tr>
               </tbody>
             </table>
           </div>
